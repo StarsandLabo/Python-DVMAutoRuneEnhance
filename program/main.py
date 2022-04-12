@@ -1,9 +1,12 @@
 #+ ######### init params #########
 from argparse import ArgumentTypeError
+from fcntl import LOCK_WRITE
 import pathlib, sys
+from random import weibullvariate
 from socket import timeout
+from turtle import right
 
-from cv2 import reduce
+from cv2 import cvtColor, reduce
 from jinja2 import TemplateSyntaxError
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
@@ -31,7 +34,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import cv2
 import pyautogui as pag
-from PIL import ImageGrab as Image
+#from PIL import ImageGrab as Image
+from PIL import Image
 
 #* My tools
 from tools import colortheme as clr
@@ -101,6 +105,8 @@ def GetClickPosition(debug=debugmode, confidence=0.8, **kwargs):
         else:
             return GetClickPosition(debug, **kwargs)
 
+
+
 #+ 画面遷移
 equipPosition = 1 # 装着箇所
 #print(clcd.EnterRuneList, type(clcd.EnterRuneList))
@@ -162,22 +168,111 @@ if debugmode == True:
 
 #- 近似した値が削除された配列にテンプレート画像のw, hを加算し、トリミングする範囲をoriginから取得する。
 class GetArea:
-    box = {}
-
+    left    = None
+    upper   = None
+    right   = None
+    lower   = None
+    
+    box     = []
+    
     def __init__(self, template_w, template_h, startpoint_x, startpoint_y):
         print(template_w, template_h, startpoint_x, startpoint_y)
-        self.box['left']     = template_w
-        self.box['upper']    = template_h
-        self.box['right']    = startpoint_x + template_w
-        self.box['lower']    = startpoint_y + template_h
+        self.left     = template_w
+        self.upper    = template_h
+        self.right    = startpoint_x + template_w
+        self.lower    = startpoint_y + template_h
+        
+        self.box.append(startpoint_x)         # left
+        self.box.append(startpoint_y)         # upper
+        self.box.append(startpoint_x + template_w) # right
+        self.box.append(startpoint_y + template_h) # lower
 
-#- pillowでトリムする範囲を配列へ格納
+def matchTemplate(originPath, templatePath):
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
+        # cropように画像変換
+        tmp = cv2.imread(capFilepath)
+        # tmp = cv2.imread(capFilepath, 0) <- これでグレースケールで読み込めているがとりあえずこのループは様子見。治すならあとで
+        cv2.imwrite(tmpf.name, cv2.cvtColor(tmp, cv2.COLOR_RGB2GRAY))
+        
+        #cv2.imshow(mat=tmp,winname='test')
+        #cv2.waitKey(0)
+        #cv2.destroyAllWindows()
+        
+        #input(runePos.box)
+        origin_gray_trimed = Image.open(tmpf.name)
+        origin_gray_trimed.crop(runePos.box).save(tmpf.name)
+
+        # 比較画像の読み込み(強制グレースケール)
+        origin_gray_trimed = cv2.imread(tmpf.name, flags=0)
+        template_gray = cv2.imread(templatePath, flags=0)
+    
+    # テンプレートマッチング
+    result = cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED)
+    return result
+
+
+#- pillowでトリムする範囲を配列へ格納。whileでも良いかもしれない。
 for i, v in enumerate(reducedPositionList):
     print(i, w, h, v[0], v[1])
-    coordinate = GetArea(w, h, v[0], v[1])
+    runePos = GetArea(w, h, v[0], v[1])
 
-
-sys.exit()
+    #- PIL でオリジナル画像のファイルパス capFilepathをopenする。
+    
+    #- 画像をトリミングし保存する。#capfilepathはRGB
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
+        tmp = cv2.imread(capFilepath)
+        # tmp = cv2.imread(capFilepath, 0) <- これでグレースケールで読み込めているがとりあえずこのループは様子見。治すならあとで
+        cv2.imwrite(tmpf.name, cv2.cvtColor(tmp, cv2.COLOR_RGB2GRAY))
+        
+        #cv2.imshow(mat=tmp,winname='test')
+        #cv2.waitKey(0)
+        #cv2.destroyAllWindows()
+        
+        #input(runePos.box)
+        origin_gray_trimed = Image.open(tmpf.name)
+        origin_gray_trimed.crop(runePos.box).save(tmpf.name)
+        
+        #- トリムされた画像からテンプレート(鍵マーク)を検出する。
+        #  トリムされた画像をcv2で開く(グレースケール)
+        # TEMPLATE_IMG_DIR.joinpath('runelist','lock.png').as_posix()
+        template_key  = Image.open(TEMPLATE_IMG_DIR.joinpath('runelist','lock.png').as_posix())
+        
+        template_key2 = np.array(template_key, dtype=np.uint8)
+        template_key3  = cv2.cvtColor(template_key2, cv2.COLOR_RGB2GRAY)
+        
+        with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmptemplatef:
+            cv2.imwrite(tmptemplatef.name, template_key3)
+            template_key_gray = cv2.imread(tmptemplatef.name)
+        
+            # originのグレースケール画像を読み込む
+            origin_gray_trimed = cv2.imread(tmpf.name)
+            
+            # テンプレートマッチングして、信頼度を比較する。
+            result_key = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_key_gray, cv2.TM_CCOEFF_NORMED) )
+            
+            if debugmode == True:
+                print(f'{clr.DARKGREEN}similarity Max{clr.END}: {clr.DARKYELLOW}{result_key[1:]}{clr.END}')
+            
+        # 鍵マークのwith を閉じる
+        # 比較結果の信頼値が低い場合は continue する。
+        if result_key[1] <= 0.9:
+            if debugmode == True:
+                print('go to next image')
+            continue
+        
+        cv2.imshow(mat=origin_gray_trimed, winname='test')
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        
+        result_plus = matchTemplate(originPath=capFilepath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus.png').as_posix())
+        input( cv2.minMaxLoc(result_plus) )
+        
+        if result_key[1] <= 0.9:
+            if debugmode == True:
+                print('go to next image')
+            continue
+        
+        sys.exit()
 
 for point in reducedPositionList:
     cv2.rectangle(origin, point, (point[0] + w, point[1] + h), (0, 0, 255),1 ) # test for dvm

@@ -1,4 +1,5 @@
 #+ ######### init params #########
+from dataclasses import replace
 from hashlib import new
 import pathlib, sys
 
@@ -22,7 +23,7 @@ masterCount     = 0     # 近似座標削除関数で使用するループ回数
 hitPositionList = []    # cv2で取得する、関数に与える座標の配列名。
 
 #* basic modules
-import os, pprint, time, statistics, tempfile, datetime
+import os, pprint, time, statistics, tempfile, datetime, re
 
 #* advanced modules
 import numpy as np
@@ -38,6 +39,7 @@ from tools import reduce_overdetected as rod
 from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
 import pyscreeze as pysc
+import pyocr
 
 clr.colorTheme()   # initialize
 
@@ -377,12 +379,13 @@ for coord in passedItems:
     targetRarerity = max(tmpResult, key=tmpResult.get)
     
     #強化を押す直前まで設定する。
-    pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択
-    pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(rarerityMagicNumbers[targetRarerity], confidence=0.9), falseThrough=False) ) # どこまで強化するか選択
-    pag.click( GetClickPosition(debug=debugmode,**clcd.SetCommonEnhance) ) # 一般強化の押下(念の為)
+    #!pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択  本番は有効に
+    #!pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(rarerityMagicNumbers[targetRarerity], confidence=0.9), falseThrough=False) ) # どこまで強化するか選択(本番用コード)
+    #-pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(rarerityMagicNumbers[targetRarerity], confidence=0.9), falseThrough=True) ) #! どこまで強化するか選択(テストコード)
+    #!pag.click( GetClickPosition(debug=debugmode,**clcd.SetCommonEnhance) ) # 一般強化の押下(念の為)
     
     # 強化開始のループ
-    pag.click( GetClickPosition(debug=debugmode,**clcd.StartEnhance) )
+    #!pag.click( GetClickPosition(debug=debugmode,**clcd.StartEnhance) ) # 本番は有効
     #TEMPLATE_IMG_DIR.joinpath('enhance',rarerityMagicNumbers[targetRarerity['rarerity']]
     
     """
@@ -408,29 +411,181 @@ def tmpMatchTemplate(color, template):
     #+ 意外にも類似率はばらつきがあり、かつ95といった高い数値ではなかった。
     #+ なので強化終了判定は、テンプレートマッチングの結果が一定回数同じであった時強化完了とみなす。
     
+    remainingMoney_templatepath = TEMPLATE_IMG_DIR.joinpath('enhance',f'remainingMoney.png').as_posix()
+    remainingMoney_template = cv2.imread(remainingMoney_templatepath, 0)
+    remainingMoney_trimedfile = WORKING_PICTURE_SAVE_DIR.joinpath('tmp_remainingMoney_trimed_area.png').as_posix()
+    
     matchResult = None
-    prevResult  = None
     EnhanceStartTime = time.time()
+
+    tools = pyocr.get_available_tools()
+    tool  = tools[0]
+
+    #強化回数を取得するようのテンプレート
+    def GetMoney():
+        tools = pyocr.get_available_tools()
+        tool  = tools[0]
+
+        remainingMoney_templatepath = TEMPLATE_IMG_DIR.joinpath('enhance',f'remainingMoney.png').as_posix()
+        remainingMoney_template = cv2.imread(remainingMoney_templatepath, 0)
+        remainingMoney_trimedfile = WORKING_PICTURE_SAVE_DIR.joinpath('tmp_remainingMoney_trimed_area.png').as_posix()
+        
+        #強化開始時の所持金を取得する
+        remainingMoney = tmpMatchTemplate(
+            color='color', 
+            template=remainingMoney_templatepath
+        )
+        remainingMoney_target_coords = [
+            remainingMoney[3][0] + 50,
+            remainingMoney[3][1] + 13,
+            remainingMoney[3][0] + remainingMoney_template.shape[1],
+            remainingMoney[3][1] + remainingMoney_template.shape[0] + 30
+        ]
+        
+        with tempfile.NamedTemporaryFile(dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
+            remainingMoney = ScreenCapture()
+            remainingMoney.grab(mode='color', filepath=tmpf.name)
+            
+            # 取得したキャプチャを読み込み、トリム、保存する。
+            remainingMoney_origin = Image.open(tmpf.name)
+            remainingMoney_origin.crop(remainingMoney_target_coords).save(remainingMoney_trimedfile)
+        
+        # origin_gray_trimed.crop(arr).save(tmpf.name) crop の書式が不明だったから見本。
+        # pyocr で画像を読み込む
+        remainingMoney_display = tool.image_to_string( Image.open(remainingMoney_trimedfile), lang="jpn", builder=pyocr.builders.TextBuilder(tesseract_layout=6) )
+        return remainingMoney_display
+
+    #正規表現条件を先に選択
+    notNumber = re.compile(r'[^0-9]')
+
+    startMoney = GetMoney()
+    print(startMoney)
+    startMoney = startMoney.replace(".","")
+    print(startMoney)
+    #int( remainingMoney_display.replace(".","") )
+    consumption = None
+    
+    if notNumber.search(startMoney) is None:
+        consumption = int(startMoney) - int(startMoney)
+    else:
+        startMoney  = None
+        consumption = 'Sorry. current cache could not detect well.'
+    
+    currentMoney = startMoney
+    #input(startMoney)
+    
+    #-  ##############################################################################################
+    #-  ##############################################################################################
+    
     while True:
         
         # 監視間隔が密だと負荷が増えるため、sleepを置く
-        print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec', end="\r" )
-        time.sleep(0.75)
+        print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END}')
+        time.sleep(0.5)
 
         matchResult = tmpMatchTemplate(
             color='color', 
             template=TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()
         )
         
+        remainingMoney = tmpMatchTemplate(
+            color='color', 
+            template=remainingMoney_templatepath
+        )
         
-        print(f"{TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
+        print('remainingMoney values', remainingMoney)
         
-        if int( matchResult[1] * 100 ) >= 95:
+        if int( remainingMoney[1] * 100 ) > 90:
+            remainingMoney_target_coords = [
+                remainingMoney[3][0] + 50,
+                remainingMoney[3][1] + 13,
+                remainingMoney[3][0] + remainingMoney_template.shape[1],
+                remainingMoney[3][1] + remainingMoney_template.shape[0] + 30
+            ]
+            
+            print('remainingMoney_target_coords', remainingMoney_target_coords)
+            
+            with tempfile.NamedTemporaryFile(dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
+                remainingMoney = ScreenCapture()
+                remainingMoney.grab(mode='color', filepath=tmpf.name)
+                
+                # 取得したキャプチャを読み込み、トリム、保存する。
+                remainingMoney_origin = Image.open(tmpf.name)
+                remainingMoney_origin.crop(remainingMoney_target_coords).save(remainingMoney_trimedfile)
+            
+            # origin_gray_trimed.crop(arr).save(tmpf.name) crop の書式が不明だったから見本。
+            # pyocr で画像を読み込む
+            remainingMoney_display = tool.image_to_string( Image.open(remainingMoney_trimedfile), lang="jpn", builder=pyocr.builders.TextBuilder(tesseract_layout=6) )
+            
+            # トリミング
+            currentMoney = remainingMoney_display.replace(".","")
+            
+            # トリミング結果に更に数字以外のものが含まれていたら例外的な処理をする。
+            if notNumber.search(currentMoney) is None:
+                consumption = int(currentMoney) - int(startMoney)
+            else:
+                consumption = 'Sorry. current cache could not detect well.'
+            
+#           
+        
+        print(f"remaining money: {TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
+        
+        if int( matchResult[1] * 100 ) >= 97:
             break
         else:
             continue
+    print(f'Consumption amount: {clr.RED}{consumption}{clr.END}')
+    
+    pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 終了時は元の画面に戻る。
+    
+"""
+testcodes
+def tmpMatchTemplate(color, template, ocr=None):
+    #+ 類似度調査 ディスプレイ全体の画像を取得する。(この機能は別の関数に分離しても良いかも)
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
+        sc = ScreenCapture()
+        sc.grab(mode=color, filepath=tmpf.name)
+        
+        # テンプレート画像, 被検索対象をopencvで読み込む
+        cvtempimg = cv2.imread(template)
+        baseimage = cv2.imread(tmpf.name)
+        
+        # テンプレートマッチングする
+        matchResult = cv2.matchTemplate(baseimage, cvtempimg, cv2.TM_CCOEFF_NORMED)
+    
+    # 最大一致率を取得
+    matchestValue = cv2.minMaxLoc(matchResult)
+    
+    return matchestValue
 
+rarerityMagicNumbers = {
+    'LEGEND': 12,
+    'HERO'  : 9,
+    'RARE'  : 6,
+    'COMMON': 3
+}  
 
+targetRarerity = 'LEGEND'
+templatepath = TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()
+template = cv2.imread(TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix())
+
+matchResult = tmpMatchTemplate(color='color', template=templatepath)
+
+template.shape[0] # x
+template.shape[1] # y
+
+with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
+    sc = ScreenCapture()
+    sc.grab(mode='color', filepath=tmpf.name)
+    # 
+    cvtempimg = cv2.imread(tmpf.name)
+    cv2.rectangle(cvtempimg, matchResult[3], (matchResult[3][0] + template.shape[1], matchResult[3][1] + template.shape[0]), (0, 0, 255),1 )
+    
+    cv2.imshow('matched list', cvtempimg)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+"""
 """
 cv2.imshow('matched list', origin)
 cv2.waitKey(0)

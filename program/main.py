@@ -1,13 +1,8 @@
 #+ ######### init params #########
-from argparse import ArgumentTypeError
-from fcntl import LOCK_WRITE
+from hashlib import new
 import pathlib, sys
-from random import weibullvariate
-from socket import timeout
-from turtle import right
 
 from cv2 import cvtColor, reduce
-from jinja2 import TemplateSyntaxError
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
 sys.path.append(PROJECT_DIR.joinpath('tools').as_posix())
@@ -27,7 +22,7 @@ masterCount     = 0     # 近似座標削除関数で使用するループ回数
 hitPositionList = []    # cv2で取得する、関数に与える座標の配列名。
 
 #* basic modules
-import os, pprint, time, statistics, tempfile
+import os, pprint, time, statistics, tempfile, datetime
 
 #* advanced modules
 import numpy as np
@@ -42,6 +37,7 @@ from tools import colortheme as clr
 from tools import reduce_overdetected as rod
 from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
+import pyscreeze as pysc
 
 clr.colorTheme()   # initialize
 
@@ -49,7 +45,7 @@ clr.colorTheme()   # initialize
 #+++++++++++ main ++++++++++
 debugmode = True
 
-def tmpMatchTemplate(color, template):
+def tmpMatchTemplate(color, template, ocr=None):
     #+ 類似度調査 ディスプレイ全体の画像を取得する。(この機能は別の関数に分離しても良いかも)
     with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
         sc = ScreenCapture()
@@ -68,7 +64,7 @@ def tmpMatchTemplate(color, template):
     return matchestValue
 
 # リストメニュを開き、ルーン画面遷移アイコンをクリックする。
-def GetClickPosition(debug=debugmode, confidence=0.8, **kwargs):
+def GetClickPosition(debug=debugmode, confidence=0.8, falseThrough=False, **kwargs):
     ### perfcounter
     time_sta = time.perf_counter() if debug is True else None
     ###
@@ -76,7 +72,8 @@ def GetClickPosition(debug=debugmode, confidence=0.8, **kwargs):
     
     for i in range(1, kwargs['maxtry'] + 1): 
         pos = pag.locateCenterOnScreen( kwargs['template'], grayscale=True, confidence=confidence)
-        
+        #print(f'checkpoint: {pos}, {type(pos)}, {[ v for v in pos ]}')
+        #input()
         if pos is None:
             time.sleep( kwargs['timeoutsec'] )
             print(f'searching position (try {i} times)') if debug is True else None
@@ -95,15 +92,18 @@ def GetClickPosition(debug=debugmode, confidence=0.8, **kwargs):
                 
             return pos
     if pos is None:
-        retval = pag.confirm   (   
-                        text      =f'The element that matches the template image was not found on the foreground screen.\n\n scene: {kwargs["scene"]}',
-                        title     = 'Timeout',
-                        buttons   = ['Exit', 'Retry']
-        )
-        if retval == 'Exit':
-            sys.exit()
+        if falseThrough == False:
+            retval = pag.confirm   (   
+                            text      =f'The element that matches the template image was not found on the foreground screen.\n\n scene: {kwargs["scene"]}',
+                            title     = 'Timeout',
+                            buttons   = ['Exit', 'Retry']
+            )
+            if retval == 'Exit':
+                sys.exit()
+            else:
+                return GetClickPosition(debug, **kwargs)
         else:
-            return GetClickPosition(debug, **kwargs)
+            pass
 
 
 
@@ -167,6 +167,7 @@ if debugmode == True:
 #+ +++++++++++ 配列に格納されている座標のルーンが、強化してもよいかどうか判別する。++++++++++++
 
 #- 近似した値が削除された配列にテンプレート画像のw, hを加算し、トリミングする範囲をoriginから取得する。
+"""
 class GetArea:
     left    = None
     upper   = None
@@ -186,6 +187,7 @@ class GetArea:
         self.box.append(startpoint_y)         # upper
         self.box.append(startpoint_x + template_w) # right
         self.box.append(startpoint_y + template_h) # lower
+"""
 
 def matchTemplate(originPath, templatePath):
     with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
@@ -198,24 +200,40 @@ def matchTemplate(originPath, templatePath):
         #cv2.waitKey(0)
         #cv2.destroyAllWindows()
         
-        #input(runePos.box)
+        #input(arr)
         origin_gray_trimed = Image.open(tmpf.name)
-        origin_gray_trimed.crop(runePos.box).save(tmpf.name)
+        origin_gray_trimed.crop(arr).save(tmpf.name)
 
         # 比較画像の読み込み(強制グレースケール)
         origin_gray_trimed = cv2.imread(tmpf.name, flags=0)
         template_gray = cv2.imread(templatePath, flags=0)
-    
-    # テンプレートマッチング
-    result = cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED)
+        
+        w, h = template_gray.shape[::-1]
+        # テンプレートマッチング
+        result = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED) )
+        print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
+        
+        # 表示
+        rectedimage = cv2.rectangle(origin_gray_trimed, result[3],(result[3][0] + w, result[3][1] + h), (0, 0, 255),1 ) # test for dvm
+        """
+        cv2.imshow(winname=f'{templatePath.split("/")[-1]}', mat=rectedimage)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        """
     return result
 
 
 #- pillowでトリムする範囲を配列へ格納。whileでも良いかもしれない。
-for i, v in enumerate(reducedPositionList):
-    print(i, w, h, v[0], v[1])
-    runePos = GetArea(w, h, v[0], v[1])
+passedItems = []    # チェックを抜けた座標が格納される。
 
+""" 強化画面へ遷移する際は、テストデータを予め用意しておいて対応。
+for i, v in enumerate(reducedPositionList):
+    print('-----------------------------------------')
+    print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
+    print('-----------------------------------------')
+    #runePos = GetArea(w, h, v[0], v[1])
+    arr = [v[0], v[1], (v[0] + w), (v[1] + h)]
+    
     #- PIL でオリジナル画像のファイルパス capFilepathをopenする。
     
     #- 画像をトリミングし保存する。#capfilepathはRGB
@@ -228,9 +246,9 @@ for i, v in enumerate(reducedPositionList):
         #cv2.waitKey(0)
         #cv2.destroyAllWindows()
         
-        #input(runePos.box)
+        #input(arr)
         origin_gray_trimed = Image.open(tmpf.name)
-        origin_gray_trimed.crop(runePos.box).save(tmpf.name)
+        origin_gray_trimed.crop(arr).save(tmpf.name)
         
         #- トリムされた画像からテンプレート(鍵マーク)を検出する。
         #  トリムされた画像をcv2で開く(グレースケール)
@@ -251,28 +269,175 @@ for i, v in enumerate(reducedPositionList):
             result_key = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_key_gray, cv2.TM_CCOEFF_NORMED) )
             
             if debugmode == True:
-                print(f'{clr.DARKGREEN}similarity Max{clr.END}: {clr.DARKYELLOW}{result_key[1:]}{clr.END}')
+                #print(f'{clr.DARKGREEN}similarity Max{clr.END}: {clr.DARKYELLOW}{result_key[1:]}{clr.END}')
+                print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
             
         # 鍵マークのwith を閉じる
         # 比較結果の信頼値が低い場合は continue する。
         if result_key[1] <= 0.9:
             if debugmode == True:
-                print('go to next image')
+                print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Key symbol check did not pass')
             continue
         
-        cv2.imshow(mat=origin_gray_trimed, winname='test')
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+
+        #cv2.imshow(mat=origin_gray_trimed, winname='test1')
+        #cv2.waitKey(0)
+        #cv2.destroyAllWindows()
+
         
-        result_plus = matchTemplate(originPath=capFilepath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus.png').as_posix())
-        input( cv2.minMaxLoc(result_plus) )
+        result_plus = matchTemplate(originPath=capFilepath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
+        #input( cv2.minMaxLoc(result_plus) )
         
-        if result_key[1] <= 0.9:
+        if result_plus[1] >= 0.85:
             if debugmode == True:
-                print('go to next image')
+                print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check did not pass. maybe already enhanced.')
             continue
         
-        sys.exit()
+        result_plus = matchTemplate(originPath=capFilepath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus9.png').as_posix())
+        if result_plus[1] >= 0.85:
+            if debugmode == True:
+                print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
+            continue
+
+        result_plus = matchTemplate(originPath=capFilepath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus12.png').as_posix())
+        if result_plus[1] >= 0.85:
+            if debugmode == True:
+                print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
+            continue
+        
+        print(f'{clr.CYAN}Runes proceed to the enhancement process.{clr.END}')
+        
+        #- 後ろの工程で利用する、強化対象ルーンの中心座標を追加(pyscreeze.center()関数)
+        # pyscreeze モジュールに有るcenter関数を借りて、クリックしたいPoint(x, y)を得る。
+        #def center(coords):
+        #    
+        #    Returns a `Point` object with the x and y set to an integer determined by the format of `coords`.
+        #
+        #    The `coords` argument is a 4-integer tuple of (left, top, width, height).
+        arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
+    passedItems.append(arr)
+    
+
+if debugmode == True:
+    for point in passedItems:
+        cv2.rectangle(origin, (point[0], point[1]), (point[2], point[3]), (0, 0, 255),1 ) # test for dvm
+
+#print(passedItems[0][-1])
+
+"""
+
+#pag.click( GetClickPosition(debug=True, **clcd.EquipPosition(number=equipPosition, confidence=0.9) ) ) # 装着箇所を選択する(number引数で指定)
+#- moveToはテスト用。
+#? テストデータ
+#? 次の値は固定のテストデータなので、画面の位置が少しずれたら取り直す。
+reducedPositionList = [571, 513], [691, 513], [811, 513], [931, 513], [1171, 513], [1291, 513], [1050, 631], [1171, 631], [1291, 632], [571, 633], [811, 751], [930, 751], [570, 871], [690, 871], [1291, 872], [811, 992], [931, 992], [571, 993], [1292, 993], [691, 994]
+#? input(reducedPositionList[0])
+arr = [reducedPositionList[0][0], reducedPositionList[0][1], (reducedPositionList[0][0] + w), (reducedPositionList[0][1] + h)]
+arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
+
+passedItems.append(arr)
+
+#pag.moveTo( passedItems[0][-1] ) # 装着箇所を選択する(number引数で指定)
+
+def toTargetClick(point, sleeptime=3, debug=debugmode, sceneName=None):
+    pag.click( point ) # 装着箇所を選択する(number引数で指定)
+    
+    if debugmode:
+        print( "{0}".format(
+                            f'[{sys._getframe().f_code.co_name} ({clr.DARKGREEN}Scene{clr.END}:{clr.DARKYELLOW}{sceneName}{clr.END})]: {point}'
+                        )
+        )
+    
+    time.sleep(sleeptime)
+
+def rarerityCheck(): pass
+
+for coord in passedItems:
+    #toTargetClick(coord[-1], 0, debug=debugmode, sceneName='PassedItemSelect')
+    
+    # 強化画面に遷移する。テスト済み
+    #pag.click( GetClickPosition(debug=debugmode,**clcd.EnterEnhance) )
+    
+    #レアリティ確認
+    tmpResult = {}
+    for rarerityName in ['LEGEND', 'HERO', 'RARE', 'COMMON']:
+        template_rarerity = clcd.RarerityCheck(rarerityName)
+        tmp = tmpMatchTemplate(color='color', template=template_rarerity['template'])
+        tmpResult[rarerityName] = tmp[1]
+        #GetClickPosition(debug=debugmode,**clcd.RarerityCheck(rarerityName, confidence=0.95), falseThrough=True)
+        
+    #- 取得された検出結果を比較してレアリティを確定する。
+    #TEMPLATE_IMG_DIR = RESOURCE_DIR.joinpath('img', 'template')
+    rarerityMagicNumbers = {
+        'LEGEND': 12,
+        'HERO'  : 9,
+        'RARE'  : 6,
+        'COMMON': 3
+    }    
+    targetRarerity = max(tmpResult, key=tmpResult.get)
+    
+    #強化を押す直前まで設定する。
+    pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択
+    pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(rarerityMagicNumbers[targetRarerity], confidence=0.9), falseThrough=False) ) # どこまで強化するか選択
+    pag.click( GetClickPosition(debug=debugmode,**clcd.SetCommonEnhance) ) # 一般強化の押下(念の為)
+    
+    # 強化開始のループ
+    pag.click( GetClickPosition(debug=debugmode,**clcd.StartEnhance) )
+    #TEMPLATE_IMG_DIR.joinpath('enhance',rarerityMagicNumbers[targetRarerity['rarerity']]
+    
+    """
+def tmpMatchTemplate(color, template):
+    #+ 類似度調査 ディスプレイ全体の画像を取得する。(この機能は別の関数に分離しても良いかも)
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpf:
+        sc = ScreenCapture()
+        sc.grab(mode=color, filepath=tmpf.name)
+        
+        # テンプレート画像, 被検索対象をopencvで読み込む
+        cvtempimg = cv2.imread(template)
+        baseimage = cv2.imread(tmpf.name)
+        
+        # テンプレートマッチングする
+        matchResult = cv2.matchTemplate(baseimage, cvtempimg, cv2.TM_CCOEFF_NORMED)
+    
+    # 最大一致率を取得
+    matchestValue = cv2.minMaxLoc(matchResult)
+    
+    return matchestValue
+    """
+    # 現在の強化状態を確認してレアリティに即したレベルまで強化されている確認する。
+    #+ 意外にも類似率はばらつきがあり、かつ95といった高い数値ではなかった。
+    #+ なので強化終了判定は、テンプレートマッチングの結果が一定回数同じであった時強化完了とみなす。
+    
+    matchResult = None
+    prevResult  = None
+    EnhanceStartTime = time.time()
+    while True:
+        
+        # 監視間隔が密だと負荷が増えるため、sleepを置く
+        print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec', end="\r" )
+        time.sleep(0.75)
+
+        matchResult = tmpMatchTemplate(
+            color='color', 
+            template=TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()
+        )
+        
+        
+        print(f"{TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{rarerityMagicNumbers[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
+        
+        if int( matchResult[1] * 100 ) >= 95:
+            break
+        else:
+            continue
+
+
+"""
+cv2.imshow('matched list', origin)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+#cv2.imwrite('/home/starsand/choosed.png', origin)
+        #sys.exit()
+
 
 for point in reducedPositionList:
     cv2.rectangle(origin, point, (point[0] + w, point[1] + h), (0, 0, 255),1 ) # test for dvm
@@ -280,6 +445,7 @@ for point in reducedPositionList:
 cv2.imshow('matched list', origin)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+"""
 
 sys.exit()
 

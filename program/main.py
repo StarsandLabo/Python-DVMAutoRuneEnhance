@@ -102,20 +102,19 @@ def GetClickPosition(debug=debugmode, confidence=0.8, falseThrough=False, **kwar
             retval = pag.confirm   (   
                             text      =f'The element that matches the template image was not found on the foreground screen.\n\n scene: {kwargs["scene"]}',
                             title     = 'Timeout',
-                            buttons   = ['Exit', 'Retry', 'Pass']
+                            buttons   = ['Exit', 'Retry', 'Ignore']
             )
             if retval == 'Exit':
                 sys.exit()
-            elif retval == 'Pass':
+            elif retval == 'Ignore':
                 return
             else:
                 return GetClickPosition(debug, **kwargs)
         else:
-            pass
+            return 'falseThrough'
 
 def optimize(image, border=170):
     arr = np.array(image)
-    input(arr)
     # x軸を読み込む
     for i in range(len(arr)):
         # y軸を走査する
@@ -253,6 +252,12 @@ def toTargetClick(point, sleeptime=3, debug=debugmode, sceneName=None):
     
     time.sleep(sleeptime)
 
+def viewDetectArea(origin, results, template):
+        cv2.rectangle (origin, results[3], (results[3][0] + template.shape[1], results[3][1] + template.shape[0]), (0, 0, 255), 1)
+        
+        cv2.imshow(mat=inspectionTarget, winname='template')
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 #? testcodes
 """
@@ -347,6 +352,7 @@ equipPositionExistsCheck()
 
 for position in equipPositions:
     equipPosition = int(position)
+    #! 本番は有効
     pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
 
     #+ 対象ルーンの検出と、近似座標の削除
@@ -370,6 +376,7 @@ for position in equipPositions:
 
     # テンプレートマッチング(グレースケールのオリジナル画像と、グレースケールのテンプレート画像のマッチング)
     result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+    resMinMaxLoc = cv2.minMaxLoc(result)
 
     #input(result)
 
@@ -377,16 +384,9 @@ for position in equipPositions:
     #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
     threshold = 0.53 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
     locate = np.where(result >= threshold)
-
-    #? testcodes
-    #? for point in zip(*locate[::-1]):
-    #?    cv2.rectangle(origin, point, (point[0] + w, point[1] + h), (0, 0, 255),1 ) # test for dvm
-    #? 
-    #?cv2.imshow('matched list', origin)
-    #?cv2.waitKey(0)
-    #?cv2.destroyAllWindows()
     
-    #?input('inputpoint')
+    areacheck = False
+    if areacheck == True: viewDetectArea(origin=origin, results=resMinMaxLoc, template=templatePath)
 
     # 検出結果から近似の座標を間引くために、座標を配列に格納
     posListIntermidiate = []
@@ -395,7 +395,9 @@ for position in equipPositions:
         #print(f'var point({len(locate[0])}): {pointx, pointy}')
         
         posListIntermidiate.append([pointx, pointy])
-
+    
+    #古代ルーン補完モードここまで
+    
     posListIntermidiate_count = len(posListIntermidiate)
 
     if debugmode == True:
@@ -405,27 +407,23 @@ for position in equipPositions:
     masterCount = 0
     reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
 
-    #? get testdata
-    #? print(reducedPositionList)
-    #? input()
-
     if debugmode == True:
-        print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {( len(reducedPositionList) - posListIntermidiate_count)  * -1 }item reduced.')
-
+        print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {( len(reducedPositionList) - posListIntermidiate_count)  * -1 } items reduced.')
+    
+    #input()
     #+ +++++++++++ 配列に格納されている座標のルーンが、強化してもよいかどうか判別する。++++++++++++
 
     #- 近似した値が削除された配列にテンプレート画像のw, hを加算し、トリミングする範囲をoriginから取得する。
 
     #- pillowでトリムする範囲を配列へ格納。whileでも良いかもしれない。
     passedItems = []    # チェックを抜けた座標が格納される。
-
-
+    # 鍵、プラスチェック
     # 強化画面へ遷移する際は、テストデータを予め用意しておいて対応。
     for i, v in enumerate(reducedPositionList):
-        print('-----------------------------------------')
+        print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
         print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
-        print('-----------------------------------------')
-        #runePos = GetArea(w, h, v[0], v[1])
+        print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'))
+
         arr = [v[0], v[1], (v[0] + w), (v[1] + h)]
         
         # オリジンを読み込み、グレースケールで書き出す。
@@ -457,25 +455,27 @@ for position in equipPositions:
                     # テンプレートマッチングして、信頼度を比較する。
                     result_key = cv2.minMaxLoc( cv2.matchTemplate(inspectionTarget, template_key_gray, cv2.TM_CCOEFF_NORMED) )
                     
+                    # 検出範囲を確認する場合はareacheck = True
+                    areacheck = False
+                    if areacheck == True: viewDetectArea(inspectionTarget, result_key, template_key_gray)
+                    
                     if debugmode == True:
-                        #print(f'{clr.DARKGREEN}similarity Max{clr.END}: {clr.DARKYELLOW}{result_key[1:]}{clr.END}')
-                        print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
+                        if result_key[1] <= 0.9 and result_key[1] >= 0.7:
+                            
+                            areacheck = False
+                            if areacheck == True: viewDetectArea(inspectionTarget, result_key, template_key_gray)
+                        else:
+                            print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
                     
                 # 鍵マークのwith を閉じる
                 # 比較結果の信頼値が低い場合は continue する。
-                if result_key[1] <= 0.9:
-                    if debugmode == True:
-                        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Key symbol check did not pass')
+                if result_key[1] <= 0.7:
+                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}, {clr.RED}Lock symbol check did not pass{clr.END}')
                     continue
                     
-                #cv2.imshow(mat=inspectionTarget, winname='test1')
-                #cv2.waitKey(0)
-                #cv2.destroyAllWindows()
-                #
-                
                 #? 現在withで開かれているのは、大本のオリジンと、検査対象(ルーンひとつ分の画像)
                 #? 実際の想定はtmpTrimmedRuneFromOrigin.name
-                def MatchWithOCRGray(templatePath, originPath=None, threshold=None, **kwargs):
+                def MatchWithOCRGray(templatePath, originPath=None, threshold=None, withoutOCR=True, **kwargs):
                     # テンプレートマッチングで検査される側(origin)とテンプレートをcv2に取り込む
                     runeOrigin = cv2.imread(originPath)
                     plus_template = cv2.imread(templatePath)
@@ -487,102 +487,119 @@ for position in equipPositions:
                         plus_results[3][0] + plus_template.shape[1],
                         plus_results[3][1] + plus_template.shape[0],
                     )
-                    print(f'{templatePath.split("/")[-1]}: {plus_results}')
+                    #print(f'{templatePath.split("/")[-1]}: {plus_results}')
                     #? view testcode
-                    #?cv2.rectangle (runeOrigin, plus_results[3], (plus_results[3][0] + plus_template.shape[1], plus_results[3][1] + plus_template.shape[0]), (0, 0, 255), 1)
-                    
-                    #?cv2.imshow('match result', runeOrigin)
-                    #?cv2.waitKey(0)
-                    #?cv2.destroyAllWindows()
-                    
-                    # pillowで読み込む
-                    pil_runeOrigin = Image.open(originPath)
-                    
-                    # pillowでcrop
-                    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpExtractEnhancedLevel:
-                        pil_runeOrigin.crop(cropArea).save(tmpExtractEnhancedLevel.name)
+                    viewDetectArea = False
+                    if viewDetectArea == True:
+                        cv2.rectangle (runeOrigin, plus_results[3], (plus_results[3][0] + plus_template.shape[1], plus_results[3][1] + plus_template.shape[0]), (0, 0, 255), 1)
                         
-                        with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpBinaryImage:
-                            img = optimizeGray ( Image.open(tmpExtractEnhancedLevel.name), border=220 )
-                            img.save(tmpBinaryImage.name)
-                            #
-                            # pyocrを利用して数値を取得する。
-                            #
-                            tools = pyocr.get_available_tools()
-                            tool  = tools[0]
+                        cv2.imshow('match result', runeOrigin)
+                        cv2.waitKey(0)
+                        cv2.destroyAllWindows()
+                    else:
+                        pass
+                    
+                    if withoutOCR == False:                    
+                        # pillowで読み込む
+                        pil_runeOrigin = Image.open(originPath)
+                        
+                        # pillowでcrop
+                        with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.jpg' ) as tmpExtractEnhancedLevel:
+                            pil_runeOrigin.crop(cropArea).save(tmpExtractEnhancedLevel.name)
                             
-                            enhanceLevel = tool.image_to_string( Image.open(tmpBinaryImage.name), lang='jpn', builder=pyocr.builders.TextBuilder(tesseract_layout=6) )
-                    return enhanceLevel
+                            # OCRもーどによって挙動を変化させる。
+                            with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpBinaryImage:
+                                img = optimizeGray ( Image.open(tmpExtractEnhancedLevel.name), border=220 )
+                                img.save(tmpBinaryImage.name)
+                                #
+                                # pyocrを利用して数値を取得する。
+                                #
+                                tools = pyocr.get_available_tools()
+                                tool  = tools[0]
+                                
+                                enhanceLevel = tool.image_to_string( Image.open(tmpBinaryImage.name), lang='jpn', builder=pyocr.builders.TextBuilder(tesseract_layout=6) )
+                                
+                        return plus_results, enhanceLevel
+                    else:
+                        return plus_results
                 
-                for n in range(3,16):
-                    levelJudge = MatchWithOCRGray(templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','numbers','original',f'{n}.png').as_posix(),originPath=tmpTrimmedRuneFromOrigin.name)
-                    #print(f'{n}:{levelJudge}')
-    input('stoppoint')
-
-
-    """
-                #旧レアリティ判別
-                result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
-                #input( cv2.minMaxLoc(result_plus) )
+                #+ OCRの使用有無でコードを分ける
+                witoutOCR = True
+                template_plus = TEMPLATE_IMG_DIR.joinpath('runelist','plus.png').as_posix()
+                if witoutOCR == True:
+                    ret_plusMatch = MatchWithOCRGray(withoutOCR=True, templatePath=template_plus, originPath=tmpTrimmedRuneFromOrigin.name)
+                else:
+                    ret_plusMatch = MatchWithOCRGray(withoutOCR=False, templatePath=template_plus, originPath=tmpTrimmedRuneFromOrigin.name)
                 
-                if result_plus[1] >= 0.85:
-                    if debugmode == True:
-                        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check did not pass. maybe already enhanced.')
+                # プラスのマッチ度が高い画像は次の工程に進まない(すでに強化済みという判定)
+                if ret_plusMatch[1] > 0.9:
+                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {template_plus.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Plus symbol check did not pass{clr.END}')
                     continue
-                
-                result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus9.png').as_posix())
-                if result_plus[1] >= 0.85:
-                    if debugmode == True:
-                        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
-                    continue
-                    #
-                result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus12.png').as_posix())
-                if result_plus[1] >= 0.85:
-                    if debugmode == True:
-                        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
-                    continue
-                
-                print(f'{clr.CYAN}Runes proceed to the enhancement process.{clr.END}')
-                
-                #input()
-                #- 後ろの工程で利用する、強化対象ルーンの中心座標を追加(pyscreeze.center()関数)
-                # pyscreeze モジュールに有るcenter関数を借りて、クリックしたいPoint(x, y)を得る。
-                #def center(coords):
-                #    
-                #    Returns a `Point` object with the x and y set to an integer determined by the format of `coords`.
+                else:
+                    arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
+                    passedItems.append(arr)
+                    
+    print(passedItems)
+    print('items:', len(passedItems))
+    
+    # 旧プラス判別
+            #旧プラス判別
+            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
+            #input( cv2.minMaxLoc(result_plus) )
+            #
+            #if result_plus[1] >= 0.85:
+            #    if debugmode == True:
+            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check did not pass. maybe already enhanced.')
+            #    continue
+            #
+            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus9.png').as_posix())
+            #if result_plus[1] >= 0.85:
+            #    if debugmode == True:
+            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
+            #    continue
                 #
-                #    The `coords` argument is a 4-integer tuple of (left, top, width, height).
-                arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
-            passedItems.append(arr)
-
+            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus12.png').as_posix())
+            #if result_plus[1] >= 0.85:
+            #    if debugmode == True:
+            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
+            #    continue
+            #
+            #print(f'{clr.CYAN}Runes proceed to the enhancement process.{clr.END}')
+            #
+            #input()
+            #- 後ろの工程で利用する、強化対象ルーンの中心座標を追加(pyscreeze.center()関数)
+            # pyscreeze モジュールに有るcenter関数を借りて、クリックしたいPoint(x, y)を得る。
+            #def center(coords):
+            #    
+            #    Returns a `Point` object with the x and y set to an integer determined by the format of `coords`.
+            #
+            #    The `coords` argument is a 4-integer tuple of (left, top, width, height).
+            #arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
+        #passedItems.append(arr)
+    
+    
     #pag.click( GetClickPosition(debug=True, **clcd.EquipPosition(number=equipPosition, confidence=0.9) ) ) # 装着箇所を選択する(number引数で指定)
 
     #- moveToはテスト用。
-    #? テストデータ
-    #? 次の値は固定のテストデータなので、画面の位置が少しずれたら取り直す。
-    #? reducedPositionList = [571, 513], [691, 513], [811, 513], [931, 513], [1171, 513], [1291, 513], [1050, 631], [1171, 631], [1291, 632], [571, 633], [811, 751], [930, 751], [570, 871], [690, 871], [1291, 872], [811, 992], [931, 992], [571, 993], [1292, 993], [691, 994]
-    #? input(reducedPositionList[0])
-    #? arr = [reducedPositionList[0][0], reducedPositionList[0][1], (reducedPositionList[0][0] + w), (reducedPositionList[0][1] + h)]
-    #? arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
-    #? passedItems.append(arr)
-
     #pag.moveTo( passedItems[0][-1] ) # 装着箇所を選択する(number引数で指定)
-
-
+    #? passed Item テストデータ(毎回取得する必要は有る)
+    #passedItems = [[1274, 537, 1391, 654, Point(x=1332, y=595)], [1394, 539, 1511, 656, Point(x=1452, y=597)], [553, 659, 670, 776, Point(x=611, y=717)], [793, 660, 910, 777, Point(x=851, y=718)], [552, 778, 669, 895, Point(x=610, y=836)], [672, 778, 789, 895, Point(x=730, y=836)], [792, 778, 909, 895, Point(x=850, y=836)], [913, 779, 1030, 896, Point(x=971, y=837)], [1034, 779, 1151, 896, Point(x=1092, y=837)], [1154, 779, 1271, 896, Point(x=1212, y=837)], [1274, 779, 1391, 896, Point(x=1332, y=837)], [1395, 779, 1512, 896, Point(x=1453, y=837)], [552, 899, 669, 1016, Point(x=610, y=957)], [674, 899, 791, 1016, Point(x=732, y=957)], [793, 899, 910, 1016, Point(x=851, y=957)], [913, 899, 1030, 1016, Point(x=971, y=957)], [1033, 899, 1150, 1016, Point(x=1091, y=957)], [1154, 899, 1271, 1016, Point(x=1212, y=957)], [1275, 899, 1392, 1016, Point(x=1333, y=957)], [1394, 899, 1511, 1016, Point(x=1452, y=957)], [1395, 1019, 1512, 1136, Point(x=1453, y=1077)], [673, 1021, 790, 1138, Point(x=731, y=1079)], [913, 1021, 1030, 1138, Point(x=971, y=1079)], [1034, 1021, 1151, 1138, Point(x=1092, y=1079)]]
+    
     for coord in passedItems:
         # 強化画面に遷移する。テスト済み
-        toTargetClick(coord[-1], 0, debug=debugmode, sceneName='PassedItemSelect')    #本番は利用する
-        pag.click( GetClickPosition(debug=debugmode,**clcd.EnterEnhance) );time.sleep(2)            #本番は利用する
+        if True == True:
+            toTargetClick(coord[-1], 0, debug=debugmode, sceneName='PassedItemSelect')    #本番は利用する
+            pag.click( GetClickPosition(debug=debugmode,**clcd.EnterEnhance) );time.sleep(2)            #本番は利用する
         
         #レアリティ確認(旧)
-        """
+        
         #tmpResult = {}
         #for rarerityName in ['LEGEND', 'HERO', 'RARE', 'COMMON']:
         #    template_rarerity = clcd.RarerityCheck(rarerityName)
         #    tmp = tmpMatchTemplate(color='color', template=template_rarerity['template'])
         #    tmpResult[rarerityName] = tmp[1]
         #    #GetClickPosition(debug=debugmode,**clcd.RarerityCheck(rarerityName, confidence=0.95), falseThrough=True)
-    """
+    
         
         #- レアリティ比較(新)
         def DetectionAreaCheck(templatePath, permissiveRange, threshold=0.8, watchResult=True, reverse=False):
@@ -677,7 +694,14 @@ for position in equipPositions:
         
         #強化を押す直前まで設定する。
         pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択  本番は有効に
-        pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=False) ) # どこまで強化するか選択(本番用コード)
+        
+        check = pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=True) ) # どこまで強化するか選択(本番用コード)
+        # クリック時にNGだった場合。(すでにある程度強化されているやつを選択してしまったが、強化メニューに無く再検出を選択した時)
+        if check == 'falseThrough':
+            # 戻って次ルーンへ。
+            pag.click( GetClickPosition(debug=debugmode,**clcd.ReturnLuneList) ); time.sleep(1)
+            continue
+        
         #-pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=True) ) #! どこまで強化するか選択(テストコード)
         pag.click( GetClickPosition(debug=debugmode,**clcd.SetCommonEnhance) ) # 一般強化の押下(念の為)
         
@@ -793,4 +817,3 @@ for position in equipPositions:
                     f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' +f'{startMoney}' + '.jpg'
                 )
             )
-"""

@@ -23,7 +23,7 @@ debugmode = True
 equipPositions = [] # ルーン装着箇所
 equipPosition  = None
 
-permissiveRange = 10
+permissiveRange = 20
 masterCount     = 0     # 近似座標削除関数で使用するループ回数のカウント変数(再起処理を行うので外部から与えたい。)
 hitPositionList = []    # cv2で取得する、関数に与える座標の配列名。
 
@@ -37,14 +37,15 @@ import cv2
 import pyautogui as pag
 #from PIL import ImageGrab as Image
 from PIL import Image
+import pyscreeze as pysc
+import pyocr
+from tqdm import tqdm
 
 #* My tools
 from tools import colortheme as clr
 from tools import reduce_overdetected as rod
 from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
-import pyscreeze as pysc
-import pyocr
 
 clr.colorTheme()   # initialize
 
@@ -255,7 +256,7 @@ def toTargetClick(point, sleeptime=3, debug=debugmode, sceneName=None):
 def viewDetectArea(origin, results, template):
         cv2.rectangle (origin, results[3], (results[3][0] + template.shape[1], results[3][1] + template.shape[0]), (0, 0, 255), 1)
         
-        cv2.imshow(mat=inspectionTarget, winname='template')
+        cv2.imshow(mat=origin, winname='template')
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -349,53 +350,90 @@ if True == False:
 # 各装着箇所の画像とテンプレートマッチングし、最も値が高いところをequipPositionsに代入する。
 
 equipPositionExistsCheck()
+posListIntermidiate = []
+ancientRuneScaned = False
+enableAncientRuneScan = False
 
 for position in equipPositions:
     equipPosition = int(position)
     #! 本番は有効
-    pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
-
-    #+ 対象ルーンの検出と、近似座標の削除
-    #- 画面全体の画像を取得する。(完成版はtempfileでも良いかも) 余力ができたら取得する画面領域は絞る。
-    sc = ScreenCapture()
-
-    # グレースケール変換などを書ける画像のオリジナル。とそのパス
-    equipPositionOriginFilePath = WORKING_PICTURE_SAVE_DIR.joinpath(f'pos{equipPosition}origin.png').as_posix()
-    posimg = sc.grab(mode='color', filepath=equipPositionOriginFilePath)
-
-    # 判別に使用する画像
-    origin = cv2.imread(equipPositionOriginFilePath)
-    gray   = cv2.cvtColor(origin, cv2.COLOR_BGR2GRAY)
-
-    # テンプレート画像を取得(templateはグレースケールに変換した、実際に使用する画像。)※条件によってはグレースケールでなくても良い。
-    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix()
-    template     = cv2.imread(templatePath, 0)
-
-    # テンプレート画像のサイズを取得
-    w, h = template.shape[::-1]
-
-    # テンプレートマッチング(グレースケールのオリジナル画像と、グレースケールのテンプレート画像のマッチング)
-    result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-    resMinMaxLoc = cv2.minMaxLoc(result)
-
-    #input(result)
-
-    # マッチング結果が threshold と比較した値にマッチする範囲を取得
-    #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
-    threshold = 0.53 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
-    locate = np.where(result >= threshold)
     
-    areacheck = False
-    if areacheck == True: viewDetectArea(origin=origin, results=resMinMaxLoc, template=templatePath)
+    while True:
+        if ancientRuneScaned == True:
+            break
+        else:
+            if enableAncientRuneScan == True:
+                mesvar = 'Ancient Rune'
+            else:
+                mesvar = 'Normal Rune'
+            
+            print(f'Scan start(current target {mesvar})')
+            #pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
+            
+            #+ 対象ルーンの検出と、近似座標の削除
+            #- 画面全体の画像を取得する。(完成版はtempfileでも良いかも) 余力ができたら取得する画面領域は絞る。
+            sc = ScreenCapture()
 
-    # 検出結果から近似の座標を間引くために、座標を配列に格納
-    posListIntermidiate = []
-    print(clr.DARKRED + f'(1) locateで取得できた値を、ひとつの配列にまとめる ' + clr.END) if debugmode == True else None
-    for pointx, pointy in zip(*locate[::-1]):
-        #print(f'var point({len(locate[0])}): {pointx, pointy}')
-        
-        posListIntermidiate.append([pointx, pointy])
-    
+            # グレースケール変換などを書ける画像のオリジナル。とそのパス
+            equipPositionOriginFilePath = WORKING_PICTURE_SAVE_DIR.joinpath(f'pos{equipPosition}origin.png').as_posix()
+            posimg = sc.grab(mode='color', filepath=equipPositionOriginFilePath)
+
+            # 判別に使用する画像
+            origin = cv2.imread(equipPositionOriginFilePath)
+            gray   = cv2.cvtColor(origin, cv2.COLOR_BGR2GRAY)
+
+            
+            # テンプレート画像を取得(templateはグレースケールに変換した、実際に使用する画像。)※条件によってはグレースケールでなくても良い。
+            #templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix()
+            # 古代ルーンのスキャン状態に応じてテンプレートのパスを変更する。
+            #if enableAncientRuneScan == False:
+            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! normal
+            #else:
+            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}a.png').as_posix() #! ancient
+            
+            ancientRuneScaned = True #! 暫定処理(古代ルーンの識別が上手にできたら再開する。)
+            templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! normal
+            template     = cv2.imread(templatePath, 0)
+
+            # テンプレート画像のサイズを取得
+            w, h = template.shape[::-1]
+
+            # テンプレートマッチング(グレースケールのオリジナル画像と、グレースケールのテンプレート画像のマッチング)
+            result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+            resMinMaxLoc = cv2.minMaxLoc(result)
+
+            #input(result)
+
+            # マッチング結果が threshold と比較した値にマッチする範囲を取得
+            #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
+            threshold = 0.75 ## 0.53がギリギリダイヤとかを検出しないところ / (0.695: template3.png) 現状0.53 Ancient時はもう少し高くても良いかも 0.55ぐらいじゃないと鍵付きとってくれないかも
+            locate = np.where(result >= threshold)
+
+            areacheck = True
+            if areacheck == True:
+                for item in zip(*locate[::-1]):
+                    cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
+                
+                cv2.imshow(mat=origin, winname=templatePath)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                input('input waiting')
+
+            # 検出結果から近似の座標を間引くために、座標を配列に格納
+            
+            print(clr.DARKRED + f'(1) locateで取得できた値を、ひとつの配列にまとめる ' + clr.END) if debugmode == True else None
+            for pointx, pointy in zip(*locate[::-1]):
+                #print(f'var point({len(locate[0])}): {pointx, pointy}')
+                
+                posListIntermidiate.append([pointx, pointy])
+
+            # 古代ルーンモードに応じた処理。古代ルーンが未処理の時、自戒ループで処理するようにする。
+            # 古代ルーンモードがすでにON時、ループを終了する。
+            if enableAncientRuneScan == False:
+                enableAncientRuneScan = True
+            elif enableAncientRuneScan == True:
+                ancientRuneScaned = True
+                break
     #古代ルーン補完モードここまで
     
     posListIntermidiate_count = len(posListIntermidiate)
@@ -407,6 +445,19 @@ for position in equipPositions:
     masterCount = 0
     reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
 
+    areacheck = False
+    if areacheck == True:
+        for item in reducedPositionList:
+            cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
+        
+        cv2.imshow(mat=origin, winname=templatePath)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        input('inputwaiting')
+
+    
+    input(f'rplist {reducedPositionList}')
+    
     if debugmode == True:
         print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {( len(reducedPositionList) - posListIntermidiate_count)  * -1 } items reduced.')
     
@@ -665,7 +716,7 @@ for position in equipPositions:
             
             return rarerityCheck_reducedPositionList
         
-        detectResult = DetectionAreaCheck(clcd.RarerityCheck_DIA['template'], threshold=0.98, permissiveRange=8, watchResult=False, reverse=True)
+        detectResult = DetectionAreaCheck(clcd.RarerityCheck_DIA['template'], threshold=0.985, permissiveRange=8, watchResult=False, reverse=True)
         print(f'detectresult\ncoordinates: {detectResult}, items: {len(detectResult)}')
         
         #- 取得された検出結果を比較してレアリティを確定する。
@@ -733,7 +784,11 @@ for position in equipPositions:
         consumption = None
         
         if notNumber.search(startMoney) is None:
-            consumption = int(startMoney) - int(startMoney)
+            try:
+                consumption = int(startMoney) - int(startMoney)
+            except:
+                input(startMoney)
+                consumption = 'unknown'
         else:
             startMoney  = 'unknown'
             consumption = 'Sorry. current cache could not detect well.'

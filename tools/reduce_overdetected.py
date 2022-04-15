@@ -1,41 +1,42 @@
-from fileinput import filename
-from tool import colortheme as clr
+import colortheme as clr
 import numpy as np
 import pprint
 
-def reduceOverDetectedCoordinate(masterPositionList, count, permissive):
+clr.colorTheme()
 
-    
+def reduceOverDetectedCoordinates(masterPositionList, count, permissive, primaryIndex=1):
+
     class ArgumentError(Exception):
         """ArgumentError: Expected argument "count " did not receive."""
         pass
-
+    
     if count == None:
         raise ArgumentError( 'ArgumentError: Expected argument "count " did not receive.' )
     
     try:
-        # yの座標が近い点
-        print(clr.DARKYELLOW + f'{count}回目,1stcheckpoint 基準にしたいy軸の値 {masterPositionList[count][1]}' + clr.END)
+        print(clr.DARKYELLOW + f'{count}回目,1stcheckpoint 基準にしたいy軸の値 {masterPositionList[count][primaryIndex]}' + clr.END)
     except IndexError:
         return masterPositionList
     else:
+        #input(f'count {count} times')
         nearYidx = np.where(
-                        (masterPositionList < masterPositionList[count][1] + permissive) &
-                        (masterPositionList > masterPositionList[count][1] - permissive)
+                        (masterPositionList < masterPositionList[count][primaryIndex] + permissive) &
+                        (masterPositionList > masterPositionList[count][primaryIndex] - permissive)
                     )[0][::1]
-        print(f'count: {count} / 基準にしたいy軸{masterPositionList[count][1]}を含むインデックス\nTargetindex: {nearYidx}\nlength: {len(nearYidx)}' ) 
+        print(f'count: {count} / 基準にしたいy軸{masterPositionList[count][primaryIndex]}を含むインデックス\nTargetindex: {nearYidx}\nlength: {len(nearYidx)}' ) 
         #print('masterPositionList:', len(masterPositionList) )
-        print(f'{clr.YELLOW}取得したインデックスを使用してマスター配列(posListIntermidiate)から値を取得する。{clr.END}')
         
+        print(f'{clr.YELLOW}取得したインデックスを使用してマスター配列(posListIntermidiate)から値を取得する。{clr.END}')
         print(type(nearYidx),len(nearYidx), nearYidx)
         #input()
+        
         for i, target in enumerate(nearYidx):            
             print(target, masterPositionList[target])
         #input('x, yの確認')
         
         #- nearYidx で取得したインデックスを基にmasterPositionList配列から値を取得
         coordinateByNearYidx = np.array(masterPositionList[nearYidx[0]:nearYidx[-1] + 1])
-        print(f'line 280 coordinateByNearYidx:\n', coordinateByNearYidx, type(coordinateByNearYidx), len(coordinateByNearYidx))
+        print(f'line 40 coordinateByNearYidx:\n', coordinateByNearYidx, type(coordinateByNearYidx), len(coordinateByNearYidx))
 
         checkarr = coordinateByNearYidx.tolist()
         print(f'checkarr: items {len(checkarr)}, type: {type(checkarr)}')
@@ -83,9 +84,10 @@ def reduceOverDetectedCoordinate(masterPositionList, count, permissive):
                     xAxisGroupName[xaxis] = []
                     xAxisGroupName[xaxis].append( {"idx": nearYidx[i], "value": xaxis} )
                     print(f'{clr.YELLOW}new group create{clr.END}, (xaxis: {xaxis}) appended value {xAxisGroupName[xaxis]}')
-                
-            #input(f'{xAxisGroupName}, {i}, {xaxis}')
-        #print(xAxisOnlyInNearYidx)
+            #print(f'{xAxisGroupName}, {i}, {xaxis}')
+            #print(xAxisOnlyInNearYidx)
+            #input('tier0')
+        #input('tier1')
         
         #- 各グループから、１つだけインデックスと値を残して、それ以外を削除したいx,yのインデックスとして idx_nearY_and_nearX配列に格納する。
         idx_nearY_and_nearX = []
@@ -108,7 +110,8 @@ def reduceOverDetectedCoordinate(masterPositionList, count, permissive):
         idx_nearY_and_nearX.sort()
         idx_nearY_and_nearX.reverse()
         #input(f'削除したいインデックスの値 {idx_nearY_and_nearX}')
-        
+        print(f'削除したいインデックスの値 {idx_nearY_and_nearX}')
+
         for idx in idx_nearY_and_nearX:
             print(f'index:{idx} remove value: {masterPositionList[idx]}')
             
@@ -122,7 +125,8 @@ def reduceOverDetectedCoordinate(masterPositionList, count, permissive):
         
         
         print('masterPositionList(element removed):', masterPositionList, type(masterPositionList),end="\n")
+        #input()
         count += 1
-        reduceOverDetectedCoordinate(masterPositionList=masterPositionListForRecursive, count=count, permissive=permissive)
+        reduceOverDetectedCoordinates(masterPositionList=masterPositionListForRecursive, count=count, permissive=permissive)
     finally:
         return masterPositionList

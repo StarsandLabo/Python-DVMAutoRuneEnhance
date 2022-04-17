@@ -40,7 +40,9 @@ Pythonとそのライブラリを用い、ゲームの操作を自動化をす�
 
 ## フローチャート
 
-![フローチャート](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/flowchart_2022-04-17.jpg)  
+<details><summary>サイズが大きいので折りたたみ</summary>
+[![Youtube - ドラゴンビレッジM 自動ルーン強化](https://img.youtube.com/vi/fQdml7Xbw2A/0.jpg)](https://www.youtube.com/watch?v=fQdml7Xbw2A)
+</details>
 
 ## 工夫・苦労した点
 

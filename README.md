@@ -42,8 +42,9 @@ Pythonとそのライブラリを用い、ゲームの操作を自動化をす�
 
 <details><summary>サイズが大きいので折りたたみ</summary>
 
-[![Youtube - ドラゴンビレッジM 自動ルーン強化](https://img.youtube.com/vi/fQdml7Xbw2A/0.jpg)](https://www.youtube.com/watch?v=fQdml7Xbw2A)  
-
+[![Automated DVM Rune Enhance](https://img.youtube.com/vi/fQdml7Xbw2A/0.jpg)](https://www.youtube.com/watch?v=fQdml7Xbw2A)  
+  
+  
 </details>
 
 ## 工夫・苦労した点

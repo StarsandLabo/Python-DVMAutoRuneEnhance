@@ -20,7 +20,7 @@ GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
 # テンプレートマッチングでヒットした近い座標を削除する際、近い座標と範囲する値
 debugmode = True
-equipPositions = [] # ルーン装着箇所
+equipPositions = [1,2,3,4,5,6] # ルーン装着箇所
 equipPosition  = None
 
 permissiveRange = 20
@@ -142,7 +142,68 @@ def optimizeGray(image, border=170):
                 arr[i][j] = 0
     return Image.fromarray(arr)
 
+def DetectionAreaCheck(templatePath, permissiveRange, threshold=0.8, watchResult=True, reverse=False):
+    from tools import reduce_overdetected as rod
+    
+    #テンプレート画像を読み込む 
+    tmpTemplate = cv2.imread(templatePath)
+    #input(tmpTemplate.shape[0:2:1])
+    
+    #テンプレート画像の幅と高さを取得
+    w, h = tmpTemplate.shape[0:2:1]
+    
 
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
+        
+        #検出範囲描画先用画像の取得(カラー)
+        sc = ScreenCapture()
+        sc.grab(mode='color', filepath=tmpf.name)
+        
+        #検出先を描画したい画像を読み込む
+        tmpOrigin = cv2.imread(tmpf.name)
+        
+        # テンプレートマッチングを実行
+        result = cv2.matchTemplate(tmpOrigin, tmpTemplate, cv2.TM_CCOEFF_NORMED)
+        
+        # テンプレートマッチングがしきい値以上の位置を全て取得
+        locate = np.where(result >= threshold)
+        
+        # 近似の座標を除去する。reverseがonのときは配列を逆さにする
+        rarerityCheck_posListIntermidiate = []
+        
+        if reverse == False:
+            for pointx, pointy in zip(*locate[::-1]):
+                rarerityCheck_posListIntermidiate.append([pointx, pointy])
+        elif reverse == True:
+            for pointx, pointy in zip(*locate[::-1]):
+                rarerityCheck_posListIntermidiate.append([pointy, pointx])
+            
+        pi = 0 #primaryIndex
+        masterCount = 0
+        rarerityCheck_reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=rarerityCheck_posListIntermidiate, count=masterCount, permissive=permissiveRange)
+        
+        # reverse フラグがTrueのときは配列の中身を基に戻す。numpy.int64型だとreverseが使えないかも
+        tmparr = []
+        if reverse == True:
+            print(f'{type(rarerityCheck_reducedPositionList[0])}:{rarerityCheck_reducedPositionList[0]}')
+            #print(f'{type(rarerityCheck_reducedPositionList[0][0])}:{rarerityCheck_reducedPositionList[0][0]}')
+            for item in rarerityCheck_reducedPositionList:
+                tmparr.append( [item[1], item[0]] )
+            rarerityCheck_reducedPositionList = tmparr
+            
+
+        
+        # 領域描画
+        if watchResult == True:
+            for point in rarerityCheck_reducedPositionList:
+                cv2.rectangle (tmpOrigin, point, (point[0] + w, point[1] + h), (0, 0, 255), 1)
+        
+            #閲覧
+            cv2.imshow('Detection Area',tmpOrigin)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+    
+    return rarerityCheck_reducedPositionList
 
 def GetMoney(lang='eng', engine=6):
     tools = pyocr.get_available_tools()
@@ -210,36 +271,8 @@ def equipPositionExistsCheck():
             tmparr[str(i)]= tmpResult[1]
     
     # 配列から最も値の高いキーを取得する
-    equipPositions = max(tmparr, key=tmparr.get)
+        equipPositions = max(tmparr, key=tmparr.get)
     return equipPositions
-
-def matchTemplate(originPath, templatePath):
-    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
-        # cropように画像変換
-        tmp = cv2.imread(equipPositionOriginFilePath)
-        # tmp = cv2.imread(equipPositionOriginFilePath, 0) <- これでグレースケールで読み込めているがとりあえずこのループは様子見。治すならあとで
-        cv2.imwrite(tmpf.name, cv2.cvtColor(tmp, cv2.COLOR_RGB2GRAY))
-        
-        #cv2.imshow(mat=tmp,winname='test')
-        #cv2.waitKey(0)
-        #cv2.destroyAllWindows()
-        
-        #input(arr)
-        origin_gray_trimed = Image.open(tmpf.name)
-        origin_gray_trimed.crop(arr).save(tmpf.name)
-
-        # 比較画像の読み込み(強制グレースケール)
-        origin_gray_trimed = cv2.imread(tmpf.name, flags=0)
-        template_gray = cv2.imread(templatePath, flags=0)
-        
-        w, h = template_gray.shape[::-1]
-        # テンプレートマッチング
-        result = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED) )
-        print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
-        
-        # 表示
-        rectedimage = cv2.rectangle(origin_gray_trimed, result[3],(result[3][0] + w, result[3][1] + h), (0, 0, 255),1 ) # test for dvm
-    return result
 
 def toTargetClick(point, sleeptime=3, debug=debugmode, sceneName=None):
     
@@ -338,7 +371,7 @@ with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffi
 
 #+ 画面遷移
 #print(clcd.EnterRuneList, type(clcd.EnterRuneList))
-if True == False:
+if True == True:
     pag.click( GetClickPosition(debug=True, **clcd.OpenListMenu) ) # リストメニューを開く
     pag.click( GetClickPosition(debug=True, **clcd.EnterRuneManagement) ) # ルーン管理画面は入る
     pag.click( GetClickPosition(debug=True, **clcd.EnterRuneList) ) # ルーン一覧画面へ入る
@@ -360,11 +393,38 @@ cv2AreaCheck = {
     'afterReduceDuplicatedArea': False  # 検出結果で近い領域を間引いた後。後の工程でクリックされていく強化対象
 }
 
+#? testcodes
+def tmpmatch():
+    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmp_origin:
+        sc = ScreenCapture()
+        sc.grab(mode='color', filepath=tmp_origin.name)
+        
+        origin = cv2.imread(tmp_origin.name, flags=-1)
+        
+        judgearr = {}
+        for iter_rarerity in ['LEGEND', 'HERO', 'RARE', 'COMMON']:
+            template = cv2.imread(clcd.RarerityCheck(rarerity=iter_rarerity)['template'])
+            
+            result = cv2.minMaxLoc( cv2.matchTemplate(origin, template, cv2.TM_CCOEFF_NORMED) )
+            judgearr[iter_rarerity] = result[1]
+            
+            view = False
+            if view == True:
+                detectarea = cv2.rectangle( origin, result[3], (result[3][0] + template.shape[1], result[3][1] + template.shape[0]), (0, 0, 255), 1 )
+                
+                cv2.imshow(str(clcd.RarerityCheck(rarerity=iter_rarerity)),detectarea)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                
+    pathlib.Path(tmp_origin.name).unlink(missing_ok=True)
+    return judgearr
+
 
 for position in equipPositions:
     equipPosition = int(position)
     #! 本番は有効
-    
+    print(equipPosition)
+    print()
     while True:
         if ancientRuneScaned == True:
             break
@@ -374,99 +434,99 @@ for position in equipPositions:
             elif scanRuneType == 'Standard':
                                 mesvar = 'Normal Rune'
             
-            print(f'Scan start(current target {mesvar})')
-            #pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
+        print(f'Scan start(current target {mesvar})')
+        pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
+        
+        #+ 対象ルーンの検出と、近似座標の削除
+        #- 画面全体の画像を取得する。(完成版はtempfileでも良いかも) 余力ができたら取得する画面領域は絞る。
+        sc = ScreenCapture()
+
+        # グレースケール変換などを書ける画像のオリジナル。とそのパス
+        equipPositionOriginFilePath = WORKING_PICTURE_SAVE_DIR.joinpath(f'pos{equipPosition}origin.png').as_posix()
+        posimg = sc.grab(mode='color', filepath=equipPositionOriginFilePath)
+
+        # 判別に使用する画像
+        origin = cv2.imread(equipPositionOriginFilePath)
+        gray   = cv2.cvtColor(origin, cv2.COLOR_BGR2GRAY)
+
+        
+        # テンプレート画像を取得(templateはグレースケールに変換した、実際に使用する画像。)※条件によってはグレースケールでなくても良い。
+        #templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix()
+        # 古代ルーンのスキャン状態に応じてテンプレートのパスを変更する。
+        #if scanRuneType == False:
+        #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
+        #else:
+        #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}a.png').as_posix() #! ancient
+        
+        ancientRuneScaned = True #! 暫定処理(古代ルーンの識別が上手にできたら再開する。)
+        templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
+        template     = cv2.imread(templatePath, 0)
+
+        # テンプレート画像のサイズを取得
+        w, h = template.shape[::-1]
+
+        # テンプレートマッチング(グレースケールのオリジナル画像と、グレースケールのテンプレート画像のマッチング)
+        result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+        resMinMaxLoc = cv2.minMaxLoc(result)
+
+        #input(result)
+
+        # マッチング結果が threshold と比較した値にマッチする範囲を取得
+        #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
+        # 装着箇所によってスレッショルドを変更する。
+        #- 検出内容が左右にずれるときが有るが、鍵マークの検出はずれていない検出時と同じのため、とりあえず実装する。多分テンプレートマッチングより機械学習のほうがこの辺はいける？
+        #input(f'{scanRuneType},{equipPosition}')
+        matchingThresholdTable = {
             
-            #+ 対象ルーンの検出と、近似座標の削除
-            #- 画面全体の画像を取得する。(完成版はtempfileでも良いかも) 余力ができたら取得する画面領域は絞る。
-            sc = ScreenCapture()
-
-            # グレースケール変換などを書ける画像のオリジナル。とそのパス
-            equipPositionOriginFilePath = WORKING_PICTURE_SAVE_DIR.joinpath(f'pos{equipPosition}origin.png').as_posix()
-            posimg = sc.grab(mode='color', filepath=equipPositionOriginFilePath)
-
-            # 判別に使用する画像
-            origin = cv2.imread(equipPositionOriginFilePath)
-            gray   = cv2.cvtColor(origin, cv2.COLOR_BGR2GRAY)
-
-            
-            # テンプレート画像を取得(templateはグレースケールに変換した、実際に使用する画像。)※条件によってはグレースケールでなくても良い。
-            #templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix()
-            # 古代ルーンのスキャン状態に応じてテンプレートのパスを変更する。
-            #if scanRuneType == False:
-            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
-            #else:
-            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}a.png').as_posix() #! ancient
-            
-            ancientRuneScaned = True #! 暫定処理(古代ルーンの識別が上手にできたら再開する。)
-            templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
-            template     = cv2.imread(templatePath, 0)
-
-            # テンプレート画像のサイズを取得
-            w, h = template.shape[::-1]
-
-            # テンプレートマッチング(グレースケールのオリジナル画像と、グレースケールのテンプレート画像のマッチング)
-            result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-            resMinMaxLoc = cv2.minMaxLoc(result)
-
-            #input(result)
-
-            # マッチング結果が threshold と比較した値にマッチする範囲を取得
-            #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
-            # 装着箇所によってスレッショルドを変更する。
-            #- 検出内容が左右にずれるときが有るが、鍵マークの検出はずれていない検出時と同じのため、とりあえず実装する。多分テンプレートマッチングより機械学習のほうがこの辺はいける？
-            #input(f'{scanRuneType},{equipPosition}')
-            matchingThresholdTable = {
+                'Standard': {
+                    1: 0.575,
+                    2: 0.52,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                    3: 0.525,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                    4: 0.525,    # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                    5: 0.525, # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                    6: 0.525
+                },
+                'Ancient': {
+                    1: 0.8
+                }
                 
-                    'Standard': {
-                        1: 0.575,
-                        2: 0.52,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                        3: 0.525,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                        4: 0.525,    # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                        5: 0.525, # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                        6: 0.525
-                    },
-                    'Ancient': {
-                        1: 0.8
-                    }
-                    
-            }
-            
-            
-            threshold = matchingThresholdTable[scanRuneType][equipPosition] ## 0.53がギリギリダイヤとかを検出しないところ / (0.695: template3.png) 現状0.53 Ancient時はもう少し高くても良いかも 0.55ぐらいじゃないと鍵付きとってくれないかも
-            locate = np.where(result >= threshold)
+        }
+        
+        
+        threshold = matchingThresholdTable[scanRuneType][equipPosition] ## 0.53がギリギリダイヤとかを検出しないところ / (0.695: template3.png) 現状0.53 Ancient時はもう少し高くても良いかも 0.55ぐらいじゃないと鍵付きとってくれないかも
+        locate = np.where(result >= threshold)
 
+        
+        if cv2AreaCheck['singleRuneTrim'] == True:
+            for item in zip(*locate[::-1]):
+                cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
             
-            if cv2AreaCheck['singleRuneTrim'] == True:
-                for item in zip(*locate[::-1]):
-                    cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
-                
-                cv2.imshow(mat=origin, winname=templatePath)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                
-                input('input waiting')
+            cv2.imshow(mat=origin, winname=templatePath)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            
+            input('input waiting')
 
-            # 検出結果から近似の座標を間引くために、座標を配列に格納
-            #input(f'{type(locate)}, {locate}')
-            print(clr.DARKRED + f'(1) locateで取得できた値を、ひとつの配列にまとめる ' + clr.END) if debugmode == True else None
-            for pointx, pointy in zip(*locate[::-1]):
-                #print(f'var point({len(locate[0])}): {pointx, pointy}')
-                
-                posListIntermidiate.append([pointx, pointy])
-            #input(posListIntermidiate)
+        # 検出結果から近似の座標を間引くために、座標を配列に格納
+        #input(f'{type(locate)}, {locate}')
+        print(clr.DARKRED + f'(1) locateで取得できた値を、ひとつの配列にまとめる ' + clr.END) if debugmode == True else None
+        for pointx, pointy in zip(*locate[::-1]):
+            #print(f'var point({len(locate[0])}): {pointx, pointy}')
             
-            # 古代ルーンモードに応じた処理。古代ルーンが未処理の時、自戒ループで処理するようにする。
-            # 古代ルーンモードがすでにON時、ループを終了する。
-            if scanRuneType == False:
-                scanRuneType = True
-            elif scanRuneType == True:
-                ancientRuneScaned = True
-                break
+            posListIntermidiate.append([pointx, pointy])
+        #input(posListIntermidiate)
+        
+        # 古代ルーンモードに応じた処理。古代ルーンが未処理の時、自戒ループで処理するようにする。
+        # 古代ルーンモードがすでにON時、ループを終了する。
+        if scanRuneType == False:
+            scanRuneType = True
+        elif scanRuneType == True:
+            ancientRuneScaned = True
+            break
     #古代ルーン補完モードここまで
-    
-    print(len(posListIntermidiate))
-    posListIntermidiate_count = len(posListIntermidiate)
+        
+        print(len(posListIntermidiate))
+        posListIntermidiate_count = len(posListIntermidiate)
 
     if debugmode == True:
         print(f'[{clr.DARKGREEN}matchTemplateResult{clr.END}] count:{len(posListIntermidiate)}, threshold: {threshold}')
@@ -490,7 +550,7 @@ for position in equipPositions:
         input( clr.cprint(f'Current Equip point: {equipPosition}', clr.YELLOW) )
 
     
-    input(f'rplist {reducedPositionList}')
+    #input(f'rplist {reducedPositionList}')
     
     if debugmode == True:
         print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {( len(reducedPositionList) - posListIntermidiate_count)  * -1 } items reduced.')
@@ -626,8 +686,7 @@ for position in equipPositions:
                     
     print(passedItems)
     print('items:', len(passedItems))
-    
-    # 旧プラス判別
+            
             #旧プラス判別
             #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
             #input( cv2.minMaxLoc(result_plus) )
@@ -684,74 +743,83 @@ for position in equipPositions:
         #    tmp = tmpMatchTemplate(color='color', template=template_rarerity['template'])
         #    tmpResult[rarerityName] = tmp[1]
         #    #GetClickPosition(debug=debugmode,**clcd.RarerityCheck(rarerityName, confidence=0.95), falseThrough=True)
-    
         
-        #- レアリティ比較(新)
-        def DetectionAreaCheck(templatePath, permissiveRange, threshold=0.8, watchResult=True, reverse=False):
-            from tools import reduce_overdetected as rod
-            
-            #テンプレート画像を読み込む 
-            tmpTemplate = cv2.imread(templatePath)
-            #input(tmpTemplate.shape[0:2:1])
-            
-            #テンプレート画像の幅と高さを取得
-            w, h = tmpTemplate.shape[0:2:1]
-            
-
+        def matchTemplate(originPath, templatePath, color='gray', watchResult=False):
             with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpf:
-                
-                #検出範囲描画先用画像の取得(カラー)
-                sc = ScreenCapture()
-                sc.grab(mode='color', filepath=tmpf.name)
-                
-                #検出先を描画したい画像を読み込む
-                tmpOrigin = cv2.imread(tmpf.name)
-                
-                # テンプレートマッチングを実行
-                result = cv2.matchTemplate(tmpOrigin, tmpTemplate, cv2.TM_CCOEFF_NORMED)
-                
-                # テンプレートマッチングがしきい値以上の位置を全て取得
-                locate = np.where(result >= threshold)
-                
-                # 近似の座標を除去する。reverseがonのときは配列を逆さにする
-                rarerityCheck_posListIntermidiate = []
-                
-                if reverse == False:
-                    for pointx, pointy in zip(*locate[::-1]):
-                        rarerityCheck_posListIntermidiate.append([pointx, pointy])
-                elif reverse == True:
-                    for pointx, pointy in zip(*locate[::-1]):
-                        rarerityCheck_posListIntermidiate.append([pointy, pointx])
+                # cropように画像変換
+                try:
+                    tmp = cv2.imread(equipPositionOriginFilePath)
+                except NameError:
+                    tmp = cv2.imread(templatePath)
                     
-                pi = 0 #primaryIndex
-                masterCount = 0
-                rarerityCheck_reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=rarerityCheck_posListIntermidiate, count=masterCount, permissive=permissiveRange)
+                # tmp = cv2.imread(equipPositionOriginFilePath, 0) <- これでグレースケールで読み込めているがとりあえずこのループは様子見。治すならあとで
+                if color == 'gray':
+                    cv2.imwrite(tmpf.name, cv2.cvtColor(tmp, cv2.COLOR_RGB2GRAY))
+                elif color == 'color':
+                    cv2.imwrite(tmpf.name, cv2.cvtColor(tmp) )
                 
-                # reverse フラグがTrueのときは配列の中身を基に戻す。numpy.int64型だとreverseが使えないかも
-                tmparr = []
-                if reverse == True:
-                    print(f'{type(rarerityCheck_reducedPositionList[0])}:{rarerityCheck_reducedPositionList[0]}')
-                    #print(f'{type(rarerityCheck_reducedPositionList[0][0])}:{rarerityCheck_reducedPositionList[0][0]}')
-                    for item in rarerityCheck_reducedPositionList:
-                        tmparr.append( [item[1], item[0]] )
-                    rarerityCheck_reducedPositionList = tmparr
-                    
-
+                #cv2.imshow(mat=tmp,winname='test')
+                #cv2.waitKey(0)
+                #cv2.destroyAllWindows()
                 
-                # 領域描画
+                #input(arr)
+                origin_gray_trimed = Image.open(tmpf.name)
+                origin_gray_trimed.crop(arr).save(tmpf.name)
+                
+                # 比較画像の読み込み(強制グレースケール)
+                if color == 'gray':
+                    origin_gray_trimed = cv2.imread(tmpf.name, flags=0)
+                    template_gray = cv2.imread(templatePath, flags=0)
+                elif color == 'color':
+                    origin_gray_trimed = cv2.imread(tmpf.name, flags=-1)
+                    template_gray = cv2.imread(templatePath, flags=-1)
+                w, h = template_gray.shape[::-1]
+                # テンプレートマッチング
+                result = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED) )
+                print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
+                
+                # 表示
                 if watchResult == True:
-                    for point in rarerityCheck_reducedPositionList:
-                        cv2.rectangle (tmpOrigin, point, (point[0] + w, point[1] + h), (0, 0, 255), 1)
-                
-                    #閲覧
-                    cv2.imshow('Detection Area',tmpOrigin)
+                    rectedimage = cv2.rectangle(origin_gray_trimed, result[3],(result[3][0] + w, result[3][1] + h), (0, 0, 255),1 ) # test for dvm
+                    
+                    cv2.imshow(template, rectedimage)
                     cv2.waitKey(0)
                     cv2.destroyAllWindows()
-            
-            return rarerityCheck_reducedPositionList
+                
+            pathlib.Path(tmpf.name).unlink(missing_ok=True)
+            return result
+
+
         
-        detectResult = DetectionAreaCheck(clcd.RarerityCheck_DIA['template'], threshold=0.985, permissiveRange=8, watchResult=False, reverse=True)
-        print(f'detectresult\ncoordinates: {detectResult}, items: {len(detectResult)}')
+        #- レアリティ比較(新)
+        def tmpmatch():
+            with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmp_origin:
+                sc = ScreenCapture()
+                sc.grab(mode='color', filepath=tmp_origin.name)
+                
+                origin = cv2.imread(tmp_origin.name, flags=-1)
+                
+                judgearr = {}
+                for iter_rarerity in ['LEGEND', 'HERO', 'RARE', 'COMMON']:
+                    template = cv2.imread(clcd.RarerityCheck(rarerity=iter_rarerity)['template'])
+                    
+                    result = cv2.minMaxLoc( cv2.matchTemplate(origin, template, cv2.TM_CCOEFF_NORMED) )
+                    judgearr[iter_rarerity] = result[1]
+                    
+                    view = False
+                    if view == True:
+                        detectarea = cv2.rectangle( origin, result[3], (result[3][0] + template.shape[1], result[3][1] + template.shape[0]), (0, 0, 255), 1 )
+                        
+                        cv2.imshow(str(clcd.RarerityCheck(rarerity=iter_rarerity)),detectarea)
+                        cv2.waitKey(0)
+                        cv2.destroyAllWindows()
+                        
+            pathlib.Path(tmp_origin.name).unlink(missing_ok=True)
+            return judgearr
+
+
+        
+            #print(f'detectresult\ncoordinates: {detectResult}, items: {len(detectResult)}')
         
         #- 取得された検出結果を比較してレアリティを確定する。
         #TEMPLATE_IMG_DIR = RESOURCE_DIR.joinpath('img', 'template')
@@ -773,7 +841,11 @@ for position in equipPositions:
         #rarerityMagicNumbers = {'LEGEND': 12, 'HERO'  : 9, 'RARE'  : 6, 'COMMON': 3 }
         #targetRarerity = max(tmpResult, key=tmpResult.get)
         
-        targetRarerity = rarerityJudgeTable[len(detectResult)] #- 新レアリティ判別
+        #- 第三次レアリティ判別
+        retvals = tmpmatch()
+        targetRarerity = max(retvals, key=retvals.get)
+        
+        #targetRarerity = rarerityJudgeTable[len(detectResult)] # 第2次レアリティ判別
         
         print(f"Target Rune rarerity is {rarerityColor[targetRarerity]}{targetRarerity}{clr.END} ")
         
@@ -854,7 +926,7 @@ for position in equipPositions:
                 template=TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()
             )
             
-           # トリミング
+            # トリミング
             currentMoney = GetMoney()
             currentMoney.replace(".","").replace(",","")
             
@@ -870,6 +942,7 @@ for position in equipPositions:
                 break
             else:
                 continue
+        
         print(f'Consumption amount: {clr.RED}{consumption}{clr.END}')
         
         pag.click( GetClickPosition(debug=debugmode,**clcd.ReturnLuneList) ); time.sleep(1) # 終了時は元の画面に戻る。sleepは調整用
@@ -906,3 +979,5 @@ for position in equipPositions:
                     f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' +f'{startMoney}' + '.jpg'
                 )
             )
+    ancientRuneScaned = False
+    print('point')

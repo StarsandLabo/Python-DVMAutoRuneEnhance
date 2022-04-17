@@ -46,7 +46,7 @@ from tools import colortheme as clr
 from tools import reduce_overdetected as rod
 from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
-
+from tools.GetUniqueCoordinates import GetUniqueCoordinates
 clr.colorTheme()   # initialize
 
 
@@ -352,7 +352,14 @@ if True == False:
 equipPositionExistsCheck()
 posListIntermidiate = []
 ancientRuneScaned = False
-enableAncientRuneScan = False
+scanRuneType = 'Standard'
+
+#検出領域を確認するか。
+cv2AreaCheck = {
+    'singleRuneTrim': False,            # ルーン1つ1つを見極められるか
+    'afterReduceDuplicatedArea': False  # 検出結果で近い領域を間引いた後。後の工程でクリックされていく強化対象
+}
+
 
 for position in equipPositions:
     equipPosition = int(position)
@@ -362,10 +369,10 @@ for position in equipPositions:
         if ancientRuneScaned == True:
             break
         else:
-            if enableAncientRuneScan == True:
-                mesvar = 'Ancient Rune'
-            else:
-                mesvar = 'Normal Rune'
+            if  scanRuneType == 'Ancient':
+                                mesvar = 'Ancient Rune'
+            elif scanRuneType == 'Standard':
+                                mesvar = 'Normal Rune'
             
             print(f'Scan start(current target {mesvar})')
             #pag.click( GetClickPosition(debug=True, **clcd.Position(number=equipPosition, confidence=0.9) ) ); time.sleep(1.5) # 装着箇所を選択する(number引数で指定)sleepは後ろの工程に影響が有るため入れておく
@@ -386,13 +393,13 @@ for position in equipPositions:
             # テンプレート画像を取得(templateはグレースケールに変換した、実際に使用する画像。)※条件によってはグレースケールでなくても良い。
             #templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix()
             # 古代ルーンのスキャン状態に応じてテンプレートのパスを変更する。
-            #if enableAncientRuneScan == False:
-            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! normal
+            #if scanRuneType == False:
+            #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
             #else:
             #    templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}a.png').as_posix() #! ancient
             
             ancientRuneScaned = True #! 暫定処理(古代ルーンの識別が上手にできたら再開する。)
-            templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! normal
+            templatePath = TEMPLATE_IMG_DIR.joinpath('runelist',f'frame{equipPosition}.png').as_posix() #! standard
             template     = cv2.imread(templatePath, 0)
 
             # テンプレート画像のサイズを取得
@@ -406,36 +413,59 @@ for position in equipPositions:
 
             # マッチング結果が threshold と比較した値にマッチする範囲を取得
             #threshold = 0.695 ## 0.69付近で星6の画像で★6を取得できてる。(template2.png) / (0.695: template3.png)
-            threshold = 0.75 ## 0.53がギリギリダイヤとかを検出しないところ / (0.695: template3.png) 現状0.53 Ancient時はもう少し高くても良いかも 0.55ぐらいじゃないと鍵付きとってくれないかも
+            # 装着箇所によってスレッショルドを変更する。
+            #- 検出内容が左右にずれるときが有るが、鍵マークの検出はずれていない検出時と同じのため、とりあえず実装する。多分テンプレートマッチングより機械学習のほうがこの辺はいける？
+            #input(f'{scanRuneType},{equipPosition}')
+            matchingThresholdTable = {
+                
+                    'Standard': {
+                        1: 0.575,
+                        2: 0.52,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                        3: 0.525,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                        4: 0.525,    # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                        5: 0.525, # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                        6: 0.525
+                    },
+                    'Ancient': {
+                        1: 0.8
+                    }
+                    
+            }
+            
+            
+            threshold = matchingThresholdTable[scanRuneType][equipPosition] ## 0.53がギリギリダイヤとかを検出しないところ / (0.695: template3.png) 現状0.53 Ancient時はもう少し高くても良いかも 0.55ぐらいじゃないと鍵付きとってくれないかも
             locate = np.where(result >= threshold)
 
-            areacheck = True
-            if areacheck == True:
+            
+            if cv2AreaCheck['singleRuneTrim'] == True:
                 for item in zip(*locate[::-1]):
                     cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
                 
                 cv2.imshow(mat=origin, winname=templatePath)
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
+                
                 input('input waiting')
 
             # 検出結果から近似の座標を間引くために、座標を配列に格納
-            
+            #input(f'{type(locate)}, {locate}')
             print(clr.DARKRED + f'(1) locateで取得できた値を、ひとつの配列にまとめる ' + clr.END) if debugmode == True else None
             for pointx, pointy in zip(*locate[::-1]):
                 #print(f'var point({len(locate[0])}): {pointx, pointy}')
                 
                 posListIntermidiate.append([pointx, pointy])
-
+            #input(posListIntermidiate)
+            
             # 古代ルーンモードに応じた処理。古代ルーンが未処理の時、自戒ループで処理するようにする。
             # 古代ルーンモードがすでにON時、ループを終了する。
-            if enableAncientRuneScan == False:
-                enableAncientRuneScan = True
-            elif enableAncientRuneScan == True:
+            if scanRuneType == False:
+                scanRuneType = True
+            elif scanRuneType == True:
                 ancientRuneScaned = True
                 break
     #古代ルーン補完モードここまで
     
+    print(len(posListIntermidiate))
     posListIntermidiate_count = len(posListIntermidiate)
 
     if debugmode == True:
@@ -443,17 +473,21 @@ for position in equipPositions:
 
     # 近似する値を削除していく。
     masterCount = 0
-    reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
-
-    areacheck = False
-    if areacheck == True:
+    #reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
+    #?import pyperclip
+    #?pyperclip.copy(str(posListIntermidiate))
+    #input()
+    reducedPositionList = GetUniqueCoordinates(posListIntermidiate, templateImagePath=templatePath, permissiveRate=50)
+    
+    if cv2AreaCheck['afterReduceDuplicatedArea'] == True:
         for item in reducedPositionList:
             cv2.rectangle (origin, (item[0], item[1]) , (item[0] + template.shape[1], item[1] + template.shape[0]), (0, 0, 255), 1)
         
         cv2.imshow(mat=origin, winname=templatePath)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-        input('inputwaiting')
+
+        input( clr.cprint(f'Current Equip point: {equipPosition}', clr.YELLOW) )
 
     
     input(f'rplist {reducedPositionList}')

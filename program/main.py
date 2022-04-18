@@ -20,7 +20,7 @@ GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
 # テンプレートマッチングでヒットした近い座標を削除する際、近い座標と範囲する値
 debugmode = True
-equipPositions = [1,2,3,4,5,6] # ルーン装着箇所
+equipPositions = [] # ルーン装着箇所
 equipPosition  = None
 
 permissiveRange = 20
@@ -47,6 +47,7 @@ from tools import reduce_overdetected as rod
 from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
 from tools.GetUniqueCoordinates import GetUniqueCoordinates
+from tools.testGetUniqueCoordinates import testGetUniqueCoordinates
 clr.colorTheme()   # initialize
 
 
@@ -371,7 +372,7 @@ with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffi
 
 #+ 画面遷移
 #print(clcd.EnterRuneList, type(clcd.EnterRuneList))
-if True == True:
+if True == False:
     pag.click( GetClickPosition(debug=True, **clcd.OpenListMenu) ) # リストメニューを開く
     pag.click( GetClickPosition(debug=True, **clcd.EnterRuneManagement) ) # ルーン管理画面は入る
     pag.click( GetClickPosition(debug=True, **clcd.EnterRuneList) ) # ルーン一覧画面へ入る
@@ -534,10 +535,14 @@ for position in equipPositions:
     # 近似する値を削除していく。
     masterCount = 0
     #reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
-    #?import pyperclip
-    #?pyperclip.copy(str(posListIntermidiate))
-    #input()
+    
+    #? testcodes
+    #import pyperclip
+    #pyperclip.copy(str(posListIntermidiate))
+    #input('pyperclip captured point')
+    
     reducedPositionList = GetUniqueCoordinates(posListIntermidiate, templateImagePath=templatePath, permissiveRate=50)
+    #? reducedPositionList = testGetUniqueCoordinates(posListIntermidiate, templateImagePath=templatePath, permissiveRate=50) testmodule
     
     if cv2AreaCheck['afterReduceDuplicatedArea'] == True:
         for item in reducedPositionList:
@@ -976,7 +981,7 @@ for position in equipPositions:
             # 取得したキャプチャを読み込み、トリム、保存する。
             remainingMoney_origin = Image.open(tmpf.name)
             remainingMoney_origin.crop(runeSummaryCoords).save(RESULT_DIR.joinpath(
-                    f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' +f'{startMoney}' + '.jpg'
+                    f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' +f'{startMoney}' + '.png'
                 )
             )
     ancientRuneScaned = False

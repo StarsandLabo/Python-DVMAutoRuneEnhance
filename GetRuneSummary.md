@@ -29,18 +29,18 @@ Pythonとそのライブラリを用い、ゲームの操作を自動化。
 ## 目的と評価
 
 + OCRによる情報の取得と加工  
-   - :ballot_box_with_check:`達成できた` :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
+   - ☑️ 達成できた :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
      + 結果は実用レベルに到達しなかったが、満足の行く結果だった。  
      + 取得方法を工夫することができた。  
      + 取得内容が不十分でも、補正することができ、それによって利用できる情報も有ることが分かった。  
    
 + OCRへの興味を充足させる  
-   - :ballot_box_with_check: `達成できた` :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
+   - ☑️ 達成できた :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
 + 実際にゲーム内で行うには非常に煩雑な作業の自動化  
-   - :black_square_button: 達成できた :black_square_button: 概ね達成できた :ballot_box_with_check: `達成できなかった`
+   - :black_square_button: 達成できた :black_square_button: 概ね達成できた ☑️ `達成できなかった`
     + 実用できるレベルではない。
 + 自分の発想をもって課題解決の方法を導き出す。
-   - :ballot_box_with_check: `達成できた` :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
+   - ☑️ 達成できた :black_square_button: 概ね達成できた :black_square_button: 達成できなかった
     + このテーマ自体が通常のプレイではできない情報の取得の仕方へのアプローチ。そして自動化。
     + +のテンプレートを利用することで、適切な対象を無理なく選び出す
     + 色の変わらないピクセルを指定することでレアリティの判別をより安定感の高いものとした。

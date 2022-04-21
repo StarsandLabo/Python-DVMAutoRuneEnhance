@@ -668,6 +668,7 @@ for n, coords_position in enumerate(coords_positions):
                 framebase.append(rarerity)
             except:
                 framebase.append('unknown')
+                print( log_pandas(title='Rarerity unknown', titlecolor=clr.DARKRED) )
 
             #- プラスの座標をクリックする
             pag.click(x=coord[0], y=coord[1]); time.sleep(2.5)
@@ -960,6 +961,7 @@ for n, coords_position in enumerate(coords_positions):
                                 try:
                                     ability_value = re.search(r'\d+', tmp_value).group()
                                 except:
+                                    print( log_pandas(title='NameError', titlecolor=clr.DARKRED, **{'Type': 'Sub\t', 'Type': 'AbilityValue'}) )
                                     pass
                                 else:
                                     if re.search(rex.hp_digit_2_noexists, ability_value):
@@ -981,7 +983,7 @@ for n, coords_position in enumerate(coords_positions):
                                 try:
                                     tmp_value_int_part = int(re.search( (r'\d+'),tmp_value).group() )
                                 except:
-                                    cp.red('error now tmp_value: ', tmp_value)
+                                    print( log_pandas(title='NameError', titlecolor=clr.DARKRED, **{'Type': 'Sub\t', 'Type': 'AbilityName'}) )
                                     
                                 if tmp_value_int_part < 3 or tmp_value_int_part > 25:
                                     tmp_value = additional_percent_and_plus(tmp_value)
@@ -991,7 +993,7 @@ for n, coords_position in enumerate(coords_positions):
                                 try:
                                     tmp_value_int_part = int(re.search( (r'\d+'),tmp_value).group() )
                                 except:
-                                    cp.red('error now tmp_value: ', tmp_value)
+                                    print( log_pandas(title='NameError', titlecolor=clr.DARKRED, **{'Type': 'Sub\t', 'Type': 'AbilityValue'}) )
                                     
                                 if tmp_value_int_part < 181:
                                     tmp_value = additional_percent_and_plus(tmp_value)
@@ -999,7 +1001,7 @@ for n, coords_position in enumerate(coords_positions):
                                     if  rex.add_plus.search(tmp_value):
                                         tmp_value = re.sub(rex.add_plus, r'+\1', tmp_value)
                                         cp.yellow('point: over add_plus', tmp_value)
-                            cp.yellow('point: over no_plus 135', tmp_value)
+                            #cp.yellow('point: over no_plus 135', tmp_value)
                         
                         #- ルーンの番号が2の倍数
                         elif equipPosition % 2 == 0:
@@ -1022,30 +1024,30 @@ for n, coords_position in enumerate(coords_positions):
                                     if int( re.search(r'\d+',tmp_value).group() )< 3 or int( re.search(r'\d+', tmp_value).group() ) > 25:
                                         if  rex.add_percent.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_percent, '%', tmp_value)
-                                                            cp.yellow('point: over add_percent 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_perccent'}) )
                                         if  rex.add_plus.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_plus, r'+\1', tmp_value)
-                                                            cp.yellow('point: over add_plus 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_plus'}) )
                                                             
                                     # それ以外の時は暫定的にプラスと判断する。
                                     else:
                                         if  rex.add_plus.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_plus, r'+\1', tmp_value)
-                                                            cp.yellow('point: over add_plus 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_plus'}) )
                             #- HPの時の処理。
                             elif re.search(r'HP', tmp_abilityName):
                                     # 181未満は％のものと判断して処理、それ以外はプラスと判断。
                                     if int( re.search(r'\d+',tmp_value).group() ) < 181:
                                         if  rex.add_percent.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_percent, '%', tmp_value)
-                                                            cp.yellow('point: over add_percent 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_perccent'}) )
                                         if  rex.add_plus.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_plus, r'+\1', tmp_value)
-                                                            cp.yellow('point: over add_plus 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_plus'}) )
                                     else:
                                         if  rex.add_plus.search(tmp_value):
                                                             tmp_value = re.sub(rex.add_plus, r'+\1', tmp_value)
-                                                            cp.yellow('point: over add_plus 246', tmp_value)
+                                                            print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'add_plus'}) )
                             else:
                                 tmp_value = additional_percent_and_plus(tmp_value)
                         #- いずれのフィルタにもかからなかったものはunknownとする。（ファイル名から画像は追えるので情報は付加しない）
@@ -1054,11 +1056,13 @@ for n, coords_position in enumerate(coords_positions):
                             try:
                                 tmp_abilityName = rex.abilities_only.search( word ).group()
                             except NameError:
+                                print( log_pandas(title='NameError', titlecolor=clr.DARKRED, **{'Type': 'Sub\t', 'Type': 'AbilityName'}) )
                                 tmp_abilityName = ""
 
                             try:
                                 tmp_value = rex.statValue.search( word ).group()
                             except NameError:
+                                print( log_pandas(title='NameError', titlecolor=clr.DARKRED, **{'Type': 'Sub\t', 'Type': 'AbilityValue'}) )
                                 tmp_value = ""
                                 
                             framebase.append(
@@ -1216,9 +1220,11 @@ def keep ():
                     #* 【value】,がない時。コレも矯正せず、例外的なパターンを見てみたい
                     no_comma = re.compile(r'(\d+)[^\d](\d+)')
                     if no_comma.search(tmp_value):
+                                inputvalue = tmp_value
                                 tmp_value = re.sub(no_comma, r'\1,\2', tmp_value)
+                                print( log_pandas(title='RegexFilter', **{'Input': inputvalue, 'Result': tmp_value, 'FilterName': 'no_comma'}) )
                     
-                    cp.yellow('point: over no_comma 135', tmp_value)
+                    #cp.yellow('point: over no_comma 135', tmp_value)
                     
                     #* 【value】+が無い時。例外出てきそうだけど、とりあえず現状確認できてるのと類似しそうなパターンのみで
                     no_plus = re.compile(r'(?<!\+)([1|t|l])([^\.,]+)')

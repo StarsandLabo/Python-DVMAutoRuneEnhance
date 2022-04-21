@@ -20,7 +20,7 @@ GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
 # テンプレートマッチングでヒットした近い座標を削除する際、近い座標と範囲する値
 debugmode = True
-equipPositions = [] # ルーン装着箇所
+equipPositions = [1,2,3,4,5,6] # ルーン装着箇所
 equipPosition  = None
 
 permissiveRange = 20
@@ -857,12 +857,16 @@ for position in equipPositions:
         #強化を押す直前まで設定する。
         pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択  本番は有効に
         
-        check = pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=True) ) # どこまで強化するか選択(本番用コード)
-        # クリック時にNGだった場合。(すでにある程度強化されているやつを選択してしまったが、強化メニューに無く再検出を選択した時)
-        if check == 'falseThrough':
+        # 強化済みのルーンを指定してしまっていて、レベルがなかった時用。
+        pos_levelselect = GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=True)
+        if pos_levelselect == 'falseThrough':
             # 戻って次ルーンへ。
             pag.click( GetClickPosition(debug=debugmode,**clcd.ReturnLuneList) ); time.sleep(1)
             continue
+        else:
+            pag.click( pos_levelselect ) # どこまで強化するか選択(本番用コード)
+        # クリック時にNGだった場合。(すでにある程度強化されているやつを選択してしまったが、強化メニューに無く再検出を選択した時)
+        
         
         #-pag.click( GetClickPosition(debug=debugmode,**clcd.TargetLevelSelect(targetRarerity, confidence=0.9), falseThrough=True) ) #! どこまで強化するか選択(テストコード)
         pag.click( GetClickPosition(debug=debugmode,**clcd.SetCommonEnhance) ) # 一般強化の押下(念の為)
@@ -922,7 +926,6 @@ for position in equipPositions:
         while True:
             
             # 監視間隔が密だと負荷が増えるため、sleepを置く
-            print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END}')
             time.sleep(0.5)
             
 
@@ -931,19 +934,21 @@ for position in equipPositions:
                 template=TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()
             )
             
+            print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END},Match rate: {matchResult[1]}')
+            
             # トリミング
             currentMoney = GetMoney()
             currentMoney.replace(".","").replace(",","")
             
             # トリミング結果に更に数字以外のものが含まれていたら例外的な処理をする。
-            if (currentMoney) is int:
+            if type(currentMoney) is int:
                 consumption = int(currentMoney) - int(startMoney)
             else:
                 consumption = 'Sorry. current cache could not detect well.'
             
             #print(f"remaining money: {TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
             
-            if int( matchResult[1] * 100 ) >= 97:
+            if int( matchResult[1] * 100 ) >= 95:
                 break
             else:
                 continue

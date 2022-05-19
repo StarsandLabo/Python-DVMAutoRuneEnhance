@@ -1,5 +1,5 @@
-#+ ######### init params #########
-import pathlib, sys
+from email.mime import image
+import pathlib, sys, datetime
 
 from cv2 import CAP_PROP_APERTURE, cvtColor, reduce
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
@@ -15,6 +15,15 @@ TEMPLATE_IMG_DIR = RESOURCE_DIR.joinpath('img', 'template')
 
 RESULT_DIR = PROJECT_DIR.joinpath('result')
 
+LOG_FILE_NAME = "".join(
+    [
+        'RuneEnhanceAutomated_', 
+        datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
+        '.log'
+    ]
+)
+LOG_FILE_PATH = RESULT_DIR.joinpath(LOG_FILE_NAME).as_posix()
+
 GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 639
 GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
@@ -28,7 +37,7 @@ masterCount     = 0     # 近似座標削除関数で使用するループ回数
 hitPositionList = []    # cv2で取得する、関数に与える座標の配列名。
 
 #* basic modules
-import os, pprint, time, statistics, tempfile, datetime, re
+import os, pprint, time, statistics, tempfile, datetime, re, requests
 
 #* advanced modules
 import numpy as np
@@ -49,6 +58,7 @@ from tools.ScreenCapture_pillow import ScreenCapture
 from tools.GetUniqueCoordinates import GetUniqueCoordinates
 from tools.testGetUniqueCoordinates import testGetUniqueCoordinates
 clr.colorTheme()   # initialize
+
 
 
 #+++++++++++ main ++++++++++
@@ -251,7 +261,7 @@ def GetMoney(lang='eng', engine=6):
         
         # origin_gray_trimed.crop(arr).save(tmpf.name) crop の書式が不明だったから見本。
         # pyocr で画像を読み込む
-        remainingMoney_display = tool.image_to_string( Image.open(remainingMoney_trimedfile), lang=lang, builder=pyocr.builders.TextBuilder(tesseract_layout=engine) )
+        remainingMoney_display = tool.image_to_string( Image.open(remainingMoney_trimedfile), lang=lang, builder=pyocr.builders.DigitBuilder(tesseract_layout=engine) )
     return remainingMoney_display
 
 def equipPositionExistsCheck():
@@ -294,30 +304,49 @@ def viewDetectArea(origin, results, template):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+def getToken(testmode=True):
+    if testmode == True:
+        tokenpath = '/home/starsand/line-token.txt'
+        with open(tokenpath, 'r') as fp:
+            return fp.readline().replace("\n","")
+
+def send_line(msg,token):
+    # サーバに送信するパラメータ群
+    url = 'https://notify-api.line.me/api/notify'
+    headers = { 'Authorization': 'Bearer ' + token}
+    payload = { 'message': msg}
+    requests.post(url, headers=headers, params=payload)
+
+# image_file はファイルパス名だけで良い。
+def send_line_with_image(msg, token, image_file):
+    # サーバに送信するパラメータ群
+    url = 'https://notify-api.line.me/api/notify'
+    headers = { 'Authorization': 'Bearer ' + token}
+    payload = { 'message': msg}
+    
+    # 画像を読み込む
+    with open (image_file, 'rb') as fp:
+        files = {'imageFile': fp}
+        requests.post(url, headers=headers, params=payload, files=files)
+
 #? testcodes
 """
 sc = ScreenCapture()
-
 # 一番大本を取得。
 equipPositionOriginFilePath = WORKING_PICTURE_SAVE_DIR.joinpath(f'pos{equipPosition}origin.png').as_posix()
 posimg = sc.grab(mode='color', filepath=equipPositionOriginFilePath)
-
 # テンプレートマッチングで切り出したい座標を取得(テストデータを用意する)
 coordsList = [[552, 536], [672, 536], [1152, 536], [792, 537], [912, 537], [1032, 537], [1393, 538], [1403, 539], [1153, 656], [553, 658], [672, 658], [792, 658], [912, 658], [1032, 658], [1154, 775], [1032, 776], [1273, 776], [912, 777], [1393, 777], [793, 778], [1394, 895], [792, 896], [912, 896], [1032, 896], [552, 897], [672, 897], [1273, 898], [793, 1016], [1153, 1016], [1273, 1016], [673, 1017], [912, 1017], [1032, 1017], [1394, 1017]]
-
 # 画像を読み込む
 template_origin = cv2.imread(equipPositionOriginFilePath)
 template_frame = cv2.imread('/home/starsand/DVM-AutoRuneEnhance/resources/img/template/runelist/frame1.png')
 frame_w, frame_h = template_frame.shape[0],template_frame.shape[1]  # テンプレートのw,h
-
 # 画像を切り出して保存
 arr = [coordsList[2][0], coordsList[2][1], (coordsList[2][0] + frame_w), (coordsList[2][1] + frame_h)]
-
 # オリジンからframeを書き出す
 with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpTrimmedRune:
     origin = Image.open(equipPositionOriginFilePath)
     trimmedRune = origin.crop(arr).save(tmpTrimmedRune.name)
-
 # 切り出された画像を二値化(場合によって、この前にもう段画像を切り出す工程が必要になるかも(範囲を更に絞らなければならない時))
     # もう一段階画像を絞る
     trimmedRuneCv2 = cv2.imread(tmpTrimmedRune.name)
@@ -369,8 +398,16 @@ with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffi
             
             input(f'\n{clr.DARKYELLOW}character reader result{clr.END}: \U0001F63C {enhanceLevel} {type(enhanceLevel)} \U0001F436')
 """
+# Line notify 用トークン取得
+lnToken = getToken()
+
+os.chdir(PROJECT_DIR)
+with open(LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
+    pass
+
 
 #+ 画面遷移
+
 #print(clcd.EnterRuneList, type(clcd.EnterRuneList))
 if True == False:
     pag.click( GetClickPosition(debug=True, **clcd.OpenListMenu) ) # リストメニューを開く
@@ -426,6 +463,11 @@ for position in equipPositions:
     #! 本番は有効
     print(equipPosition)
     print()
+
+    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+        fp_logfile.write( datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + f'equipPosition: {equipPosition}' + "\n" )
+    pass
+    
     while True:
         if ancientRuneScaned == True:
             break
@@ -558,7 +600,7 @@ for position in equipPositions:
     #input(f'rplist {reducedPositionList}')
     
     if debugmode == True:
-        print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {( len(reducedPositionList) - posListIntermidiate_count)  * -1 } items reduced.')
+        print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {clr.RED}{( len(reducedPositionList) - posListIntermidiate_count)  * -1 }{clr.END} items reduced.')
     
     #input()
     #+ +++++++++++ 配列に格納されている座標のルーンが、強化してもよいかどうか判別する。++++++++++++
@@ -573,6 +615,11 @@ for position in equipPositions:
         print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
         print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
         print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'))
+        
+        with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+            fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
+            fp_logfile.write((f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
+            fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
 
         arr = [v[0], v[1], (v[0] + w), (v[1] + h)]
         
@@ -580,7 +627,6 @@ for position in equipPositions:
         with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpOrigin:
             tmp = cv2.imread(equipPositionOriginFilePath)
             cv2.imwrite(tmpOrigin.name, cv2.cvtColor(tmp, cv2.COLOR_RGB2GRAY))
-            
             #- 画像をトリミングし保存する。#equipPositionOriginFilePathはRGB
             with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='.png' ) as tmpTrimmedRuneFromOrigin:
                 
@@ -616,11 +662,18 @@ for position in equipPositions:
                             if areacheck == True: viewDetectArea(inspectionTarget, result_key, template_key_gray)
                         else:
                             print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
+                            
+                            with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+                                fp_logfile.write(f'Detection target: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]}' + "\n" )
+                            pass
                     
                 # 鍵マークのwith を閉じる
                 # 比較結果の信頼値が低い場合は continue する。
                 if result_key[1] <= 0.7:
                     print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}, {clr.RED}Lock symbol check did not pass{clr.END}')
+                    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+                        fp_logfile.write(f'Detection target: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]},Lock symbol check did not pass' + "\n" )
+                    pass
                     continue
                     
                 #? 現在withで開かれているのは、大本のオリジンと、検査対象(ルーンひとつ分の画像)
@@ -667,7 +720,7 @@ for position in equipPositions:
                                 tools = pyocr.get_available_tools()
                                 tool  = tools[0]
                                 
-                                enhanceLevel = tool.image_to_string( Image.open(tmpBinaryImage.name), lang='jpn', builder=pyocr.builders.TextBuilder(tesseract_layout=6) )
+                                enhanceLevel = tool.image_to_string( Image.open(tmpBinaryImage.name), lang='jpn', builder=pyocr.builders.DigitBuilder(tesseract_layout=6) )
                                 
                         return plus_results, enhanceLevel
                     else:
@@ -683,14 +736,17 @@ for position in equipPositions:
                 
                 # プラスのマッチ度が高い画像は次の工程に進まない(すでに強化済みという判定)
                 if ret_plusMatch[1] > 0.9:
-                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {template_plus.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Plus symbol check did not pass{clr.END}')
+                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Plus symbol check did not pass{clr.END}')
+                    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+                        fp_logfile.write(f'Detection target: {template_plus.split("/")[-1]}, similarity Max: {ret_plusMatch[1]}, Plus symbol check did not pass' + "\n" )
+                    pass
                     continue
                 else:
                     arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
                     passedItems.append(arr)
                     
-    print(passedItems)
-    print('items:', len(passedItems))
+    #print(passedItems)
+    print('[ Number of Build up Target ]:', len(passedItems))
             
             #旧プラス判別
             #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
@@ -781,7 +837,7 @@ for position in equipPositions:
                 w, h = template_gray.shape[::-1]
                 # テンプレートマッチング
                 result = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED) )
-                print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}: , {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
+                print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
                 
                 # 表示
                 if watchResult == True:
@@ -852,8 +908,10 @@ for position in equipPositions:
         
         #targetRarerity = rarerityJudgeTable[len(detectResult)] # 第2次レアリティ判別
         
-        print(f"Target Rune rarerity is {rarerityColor[targetRarerity]}{targetRarerity}{clr.END} ")
-        
+        print(f"[ Target Rune rarerity ]: {rarerityColor[targetRarerity]}{targetRarerity}{clr.END} ")
+        with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+            fp_logfile.write(f"[ Target Rune rarerity ]: {targetRarerity}" + "\n" )
+        pass
         #強化を押す直前まで設定する。
         pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択  本番は有効に
         
@@ -912,7 +970,7 @@ for position in equipPositions:
         #input(startMoney)
         
         pyocrlang = 'jpn'
-        pyocrbuilder = pyocr.builders.TextBuilder(tesseract_layout=6)
+        pyocrbuilder = pyocr.builders.DigitBuilder(tesseract_layout=6)
         
         #-  ##############################################################################################
         #!  public static void main()
@@ -935,7 +993,6 @@ for position in equipPositions:
             )
             
             print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END},Match rate: {matchResult[1]}')
-            
             # トリミング
             currentMoney = GetMoney()
             currentMoney.replace(".","").replace(",","")
@@ -983,11 +1040,27 @@ for position in equipPositions:
             else:
                 consumption = "unknown"
             
+            summary_image_file_name = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' + f'{startMoney}' + '.png'
+            
             # 取得したキャプチャを読み込み、トリム、保存する。
             remainingMoney_origin = Image.open(tmpf.name)
-            remainingMoney_origin.crop(runeSummaryCoords).save(RESULT_DIR.joinpath(
-                    f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' +f'{startMoney}' + '.png'
-                )
+            remainingMoney_origin.crop(runeSummaryCoords).save(RESULT_DIR.joinpath( summary_image_file_name )
             )
+            
+            # Line Notify に画像を送信
+            message = summary_image_file_name
+            send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
+            
     ancientRuneScaned = False
-    print('point')
+    print('Loop Finish.')
+    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+        fp_logfile.write(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + 'loop finish.' + "\n\n" )
+    pass
+
+print('The Report and Results are here.')
+print(RESULT_DIR)
+
+# send line notify after build up.
+
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}: Rune build up done."
+send_line(message,lnToken)

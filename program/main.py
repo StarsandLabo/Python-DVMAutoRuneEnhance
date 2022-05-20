@@ -1,4 +1,5 @@
 from email.mime import image
+from inspect import getmodule
 import pathlib, sys, datetime
 from pydoc_data.topics import topics
 
@@ -470,6 +471,13 @@ def tmpmatch():
     pathlib.Path(tmp_origin.name).unlink(missing_ok=True)
     return judgearr
 
+# 強化開始の通知をLineへ送る
+
+startMoney = GetMoney()
+startMoney = startMoney.replace(".",",")
+
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\nStart Enhance.\nEstimated Remaining Money: {startMoney}"
+send_line_with_sticker(msg=message, token=lnToken, package_id=11539, sticker_id=52114110)
 
 for position in equipPositions:
     equipPosition = int(position)
@@ -761,6 +769,7 @@ for position in equipPositions:
                     
     #print(passedItems)
     print('[ Number of Build up Target ]:', len(passedItems))
+        
             
             #旧プラス判別
             #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
@@ -1066,7 +1075,7 @@ for position in equipPositions:
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
             
     ancientRuneScaned = False
-    print('Loop Finish.')
+    print(f'Loop Finish. Total {totalPassedItems} runes enhanced.\nEstimated Remaining money is under the {startMoney}.')
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
         fp_logfile.write(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + 'loop finish.' + "\n\n" )
     pass
@@ -1076,6 +1085,7 @@ print(RESULT_DIR)
 
 # send line notify after build up.
 # スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
+money_when_enhance_completed = GetMoney().replace(".",",")
 
-message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}: {totalPassedItems} Runes enhance complete."
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\n{totalPassedItems} Runes enhance completed.\nEstimated Remaining money: {money_when_enhance_completed}."
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)

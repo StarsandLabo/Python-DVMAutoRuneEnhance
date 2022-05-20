@@ -1,5 +1,6 @@
 from email.mime import image
 import pathlib, sys, datetime
+from pydoc_data.topics import topics
 
 from cv2 import CAP_PROP_APERTURE, cvtColor, reduce
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
@@ -24,7 +25,7 @@ LOG_FILE_NAME = "".join(
 )
 LOG_FILE_PATH = RESULT_DIR.joinpath(LOG_FILE_NAME).as_posix()
 
-GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 639
+GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 839 # 639 でコメントなしになる。
 GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
 # テンプレートマッチングでヒットした近い座標を削除する際、近い座標と範囲する値
@@ -329,6 +330,17 @@ def send_line_with_image(msg, token, image_file):
         files = {'imageFile': fp}
         requests.post(url, headers=headers, params=payload, files=files)
 
+def send_line_with_sticker(msg, token, package_id, sticker_id):
+    # サーバに送信するパラメータ群
+    url = 'https://notify-api.line.me/api/notify'
+    headers = { 'Authorization': 'Bearer ' + token}
+    payload =   {
+                    'message': msg,
+                    'stickerPackageId': package_id,
+                    'stickerId': sticker_id,
+                }
+    requests.post(url, headers=headers, params=payload)
+
 #? testcodes
 """
 sc = ScreenCapture()
@@ -424,6 +436,7 @@ equipPositionExistsCheck()
 posListIntermidiate = []
 ancientRuneScaned = False
 scanRuneType = 'Standard'
+totalPassedItems = 0
 
 #検出領域を確認するか。
 cv2AreaCheck = {
@@ -744,6 +757,7 @@ for position in equipPositions:
                 else:
                     arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
                     passedItems.append(arr)
+                    totalPassedItems += len(passedItems)
                     
     #print(passedItems)
     print('[ Number of Build up Target ]:', len(passedItems))
@@ -1061,6 +1075,7 @@ print('The Report and Results are here.')
 print(RESULT_DIR)
 
 # send line notify after build up.
+# スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
 
-message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}: Rune build up done."
-send_line(message,lnToken)
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}: {totalPassedItems} Runes enhance complete."
+send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)

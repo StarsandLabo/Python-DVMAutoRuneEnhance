@@ -2,6 +2,7 @@ from email.mime import image
 from inspect import getmodule
 import pathlib, sys, datetime
 from pydoc_data.topics import topics
+from tracemalloc import start
 
 from cv2 import CAP_PROP_APERTURE, cvtColor, reduce
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
@@ -25,6 +26,11 @@ LOG_FILE_NAME = "".join(
     ]
 )
 LOG_FILE_PATH = RESULT_DIR.joinpath(LOG_FILE_NAME).as_posix()
+
+# 実行世代間利用
+PROCESS_GENERATION_FILE_DIR  = PROJECT_DIR.joinpath('Generation')
+PROCESS_GENERATION_FILE_NAME = 'GenerationFile'
+PROCESS_GENERATION           = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 
 GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 839 # 639 でコメントなしになる。
 GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
@@ -342,6 +348,40 @@ def send_line_with_sticker(msg, token, package_id, sticker_id):
                 }
     requests.post(url, headers=headers, params=payload)
 
+def GetProcessGeneration():
+    if not PROCESS_GENERATION_FILE_DIR.exists():
+        os.mkdir( PROCESS_GENERATION_FILE_DIR.as_posix() )
+        with open(LOG_FILE_PATH, 'a') as fp:
+            fp.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")} Generation file Directory created. because target directory not found.')
+        print( f'[{sys._getframe().f_code.co_name}]: Generation management Directory not found. Create directory.' )
+        
+    if not PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).exists():
+        with open( PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'x' ) as fp:
+            fp.write(PROCESS_GENERATION)
+            fp.close
+            
+        with open(LOG_FILE_PATH, 'a') as fp:
+            fp.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")} Generation file created. because target file not found.')
+        print( f'[{sys._getframe().f_code.co_name}]: Generation file not found. Create Generation file.' )
+        
+        return PROCESS_GENERATION
+    else:
+        with open( PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'w') as fp:
+            fp.write(PROCESS_GENERATION)
+        with open(LOG_FILE_PATH, 'a') as fp:
+            fp.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")} Process Generation: {PROCESS_GENERATION}')
+            
+        return PROCESS_GENERATION
+
+
+os.chdir(PROJECT_DIR)
+with open(LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
+    pass
+
+currentGeneration = GetProcessGeneration()
+print('ProcessGeneration:', currentGeneration)
+
+
 #? testcodes
 """
 sc = ScreenCapture()
@@ -414,9 +454,7 @@ with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffi
 # Line notify 用トークン取得
 lnToken = getToken()
 
-os.chdir(PROJECT_DIR)
-with open(LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
-    pass
+
 
 
 #+ 画面遷移
@@ -475,8 +513,9 @@ def tmpmatch():
 
 startMoney = GetMoney()
 startMoney = startMoney.replace(".",",")
+startMoney_Integer = int( startMoney.replace(",", "") )
 
-message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\nStart Enhance.\nEstimated Remaining Money: {startMoney}"
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\nStart Enhance\nProcess Gen: {currentGeneration}\nEstimated Remaining Money: {startMoney}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=11539, sticker_id=52114110)
 
 for position in equipPositions:
@@ -765,7 +804,7 @@ for position in equipPositions:
                 else:
                     arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
                     passedItems.append(arr)
-                    totalPassedItems += len(passedItems)
+                    
                     
     #print(passedItems)
     print('[ Number of Build up Target ]:', len(passedItems))
@@ -1063,7 +1102,7 @@ for position in equipPositions:
             else:
                 consumption = "unknown"
             
-            summary_image_file_name = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-" + f'Position_{equipPosition}-{targetRarerity}-' + f'{startMoney}' + '.png'
+            summary_image_file_name = f"Gen-{currentGeneration}_" + f"Date-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_" + f'Position-{equipPosition}_Rarerity-{targetRarerity}_' + f'EstStartMoney-{startMoney}' + '.png'
             
             # 取得したキャプチャを読み込み、トリム、保存する。
             remainingMoney_origin = Image.open(tmpf.name)
@@ -1073,6 +1112,7 @@ for position in equipPositions:
             # Line Notify に画像を送信
             message = summary_image_file_name
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
+            totalPassedItems += 1
             
     ancientRuneScaned = False
     print(f'Loop Finish. Total {totalPassedItems} runes enhanced.\nEstimated Remaining money is under the {startMoney}.')
@@ -1086,6 +1126,12 @@ print(RESULT_DIR)
 # send line notify after build up.
 # スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
 money_when_enhance_completed = GetMoney().replace(".",",")
+money_when_enhance_completed_integer = int( money_when_enhance_completed.replace(",","") )
+consumption_userNotify = (startMoney_Integer - money_when_enhance_completed_integer)
+try:
+    consumption_average    = int(consumption_userNotify / totalPassedItems)
+except ZeroDivisionError:
+    consumption_average = 0
 
-message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\n{totalPassedItems} Runes enhance completed.\nEstimated Remaining money: {money_when_enhance_completed}."
+message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\n{totalPassedItems} Runes enhance completed.\nEstimated Remaining money: {money_when_enhance_completed}\nConsumption/Average: {consumption_userNotify} / {consumption_average}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)

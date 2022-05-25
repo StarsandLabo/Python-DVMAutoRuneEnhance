@@ -1,8 +1,10 @@
 import pathlib, sys
 from subprocess import call
 from enum import Enum
-import re, datetime, pprint
+import re, datetime, pprint, os
 import tempfile
+from tkinter.filedialog import askopenfile
+from unittest import result
 
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
@@ -34,9 +36,12 @@ PROCESS_GENERATION_FILE_NAME = 'GenerationFile'
 GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 839 # 639 でコメントなしになる。
 GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
 
-
+JSON_SAVE_DIR  = PROJECT_DIR.joinpath('program','fastapi')
+JSON_FILE_NAME = 'results.json'
+JSON_FILE_PATH = JSON_SAVE_DIR.joinpath(JSON_FILE_NAME)
 
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from tools.clickcondition import ClickCondition as clcd
 import pyautogui as pag
 import cv2
@@ -44,6 +49,7 @@ from PIL import Image
 from tools.ScreenCapture_pillow import ScreenCapture
 import tools.line_submit_tools as linetools
 from tools.TerminalColors import TerminalColors as tc
+import json
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
 fg = tc.fg #フォアグラウンド 色つけ用
@@ -57,9 +63,19 @@ class PathName_Methods(str, Enum):
 app = FastAPI()
 
 results = []
+#jsonファイルが無い時は作成する。
+def CheckJSON():
+    if not JSON_FILE_PATH.exists():
+        with open(JSON_FILE_PATH.as_posix(), 'x') as fp:
+            fp.write("")
+            fp.close()
+
+CheckJSON()
 
 def EquipPositionClickFromImage(number, confidence=0.9):
     print(f'[ {sys._getframe().f_code.co_name} ] Start {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
+    
+    print(PROJECT_DIR.joinpath(clcd.Position(number=number, confidence=0.95)['template']).as_posix())
     
     pag.click(
         pag.locateCenterOnScreen(
@@ -68,13 +84,13 @@ def EquipPositionClickFromImage(number, confidence=0.9):
                     number=number,
                     confidence=confidence,
                 )['template']
-            ).as_posix()
+            ).as_posix(),confidence=0.9
         )
     )
     
     print(f'[ {sys._getframe().f_code.co_name} ] Click End ( {pag.position()} ) {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
 
-def LockMarkOperation(mode):
+def LockMarkOperation(mode, filepath):
     # キー名は、その状態にしたい内容を示す。（unlock ならロックを解除したい）
     templates = {
         'unlock'  : 'locked_big.png',
@@ -89,7 +105,7 @@ def LockMarkOperation(mode):
         sc.grab(mode='color', filepath=tmpf.name)
         
         origin   = cv2.imread(tmpf.name)
-        template = cv2.imread(template_lockpath)
+        template = cv2.imread(filepath)
         
         #- テンプレートマッチングと、類似率の取得
         matchResult = cv2.minMaxLoc( cv2.matchTemplate(origin, template, cv2.TM_CCOEFF_NORMED) )
@@ -101,9 +117,9 @@ def LockMarkOperation(mode):
             pag.locateCenterOnScreen(template_lockpath)
         )
     else:
+        print(f'[ {sys._getframe().f_code.co_name} ] Locking Operation: ', 'False')
         pass
-    
-    return print(f'[ {sys._getframe().f_code.co_name} ] end {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
+    #return print(f'[ {sys._getframe().f_code.co_name} ] end {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
 
 @app.get("/{process_gen}/{call_methods}")
 async def ReadGen(
@@ -115,11 +131,13 @@ async def ReadGen(
     y: int,
     ):
     
+    global results
+    
     # 実行世代をファイルから取得
     with open(PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'r') as fp:
         saved_gen = fp.read()
         
-    with open('./testlogs.log', 'w') as fp:
+    with open('./testlogs.log', 'a') as fp:
         fp.write(", ".join( [call_methods, str(process_gen), date, str(x), str(y)] ) )
     
     if re.fullmatch(r'\d{14}', str(process_gen) ):
@@ -135,37 +153,127 @@ async def ReadGen(
             }
         
         # 検証がOKだった時、アイテムを格納する。
-        # 既に同一ファイル名の辞書が含まれている場合は追加しない(同じURLクリック対策)
-        try:
-            duplicate_check = list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0] in results[0].values()
-        except:
-            duplicate_check = ""
-            pass # リストの中に一つもないようであればIndex Errorが出るのでこれはOK
         
-        if duplicate_check != "":
+        # 初回resultsが何もない時は、resultsに辞書を追加し、Jsonファイルへ書き込む
+        # resultsの配列が1つ以上の時、同じファイル名が含まれているか確認し、含まれていれば何もしない。
+            # len(results) == 0:
+        try:
+            print(results)
+        except:
             pass
-        else:
+        
+        if results == None or len(results) == 0:
+            results = []
             results.append(
                 {
                     'Process_gen' : process_gen,
-                    'call_method' : call_methods,
-                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0] ,
+                    'call_method' : call_methods.value,
+                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
                     'position' : pos , 
                     'coord_x': x,
                     'coord_y': y
                 }
             )
+            
+            with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+                json.dump(results, jf, indent=4)
+                jf.close()
+                
+        else:
+            # バリデーション用に一時的にオブジェクトを作成
+            
+            CheckJSON()
+            
+            print(JSON_FILE_PATH.as_posix())
+            with open(JSON_FILE_PATH.as_posix(), 'r') as jfp:
+                documents = jfp.read()
+                
+            if list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() in documents:
+                pass
+            else:
+                results.append(
+                    {
+                        'Process_gen' : process_gen,
+                        'call_method' : call_methods.value,
+                        'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
+                        'position' : pos , 
+                        'coord_x': x,
+                        'coord_y': y
+                    }
+                )
+                
+                with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+                    json.dump(results, jf, indent=4)
+                    jf.close()
+            
+        """
+        try:
+            if len(results) > 1:
+                duplicate_check = list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0] in results[0].values()
+        except:
+            duplicate_check = ""
+            pass # リストの中に一つもないようであればIndex Errorが出るのでこれはOK
+            
+        try:
+            duplicate_check
+        except:
+            results.append(
+                {
+                    'Process_gen' : process_gen,
+                    'call_method' : call_methods.value,
+                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
+                    'position' : pos , 
+                    'coord_x': x,
+                    'coord_y': y
+                }
+            )
+            
+            with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+                json.dump(results, jf, indent=4)
+                jf.close() 
+            return results
         
-        return results, len(results)
+        if duplicate_check:
+            pass
+        else:
+            results.append(
+                {
+                    'Process_gen' : process_gen,
+                    'call_method' : call_methods.value,
+                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
+                    'position' : pos , 
+                    'coord_x': x,
+                    'coord_y': y
+                }
+            )
+            
+            with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+                json.dump(results, jf, indent=4)
+                jf.close()
+        """
+        
+        pprint.pprint(results)
+        
+        return results
 
 @app.get("/exec")
-def LockAccess():
+async def LockAccess():
+    #global results
+    #pprint.pprint(results)
+    
+    with open(JSON_FILE_PATH.as_posix(), 'r') as jf:
+        results = json.load(jf)
+        jf.close()
+    
+    if len(results) == 0:
+        return 'target not found.'
+    
     for record in results:
         
         with open(PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'r') as fp:
             saved_gen = int( fp.read() )
         #+ process_genを確認する。念の為
-        if record['Process_gen'] != saved_gen:
+        if int( record['Process_gen'] ) != saved_gen:
             print(f'[ Process Generation Validation ] False')
             return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'content': 'Process_gen', 'value': record['Process_gen'], 'message': 'process_gen did not match.'}
         else:
@@ -175,6 +283,8 @@ def LockAccess():
                 # 降順でない時は降順にする(△の向きが正)
             # 装着箇所をクリックする
             EquipPositionClickFromImage(number=record['position'])
+            pag.sleep(0.6)
+            
         # 座標をクリック。
             pag.click( x=record['coord_x'], y=record['coord_y'] )
             print(f'[ Fix Coords Click ] {pag.position()} {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
@@ -190,13 +300,24 @@ def LockAccess():
                 matchResult = cv2.minMaxLoc( cv2.matchTemplate(origin, template, cv2.TM_CCOEFF_NORMED) )
                 print('[ TemplateMatching Result ]', matchResult)
             
-            if matchResult[1] < 0.7: #本番は変更したほうが良いかも0.98とか
+            if matchResult[1] < 0.3: #本番は変更したほうが良いかも0.98とか
                 return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'content': 'Template Matching', 'message': f'Matched Rate Failue {matchResult[1]}'}
             
             # 引数(unlock, lock, invert)に応じてロックマークの操作をする
-            LockMarkOperation(record['call_method'].value)
+            LockMarkOperation(record['call_method'], record['file'])
                 # サマリエリアのマークを見て、既に希望の状態（unlock だったらロック解除されている）であれば何もしない。
                 # invertは問答無用でクリックする。
                 # 正確性が不明なので、安定してると言えるまではキャプチャをとって送信。
-    return record
+    print(fg.DARKRED, 'json remove point', fg.END)
+    results = None
+    with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+        jf.write("")
+        jf.close()
+
+@app.get("/clear")
+async def ClearArray():
+    global results
+    results = None
+    os.remove( JSON_FILE_PATH.as_posix() ) if os.path.isfile(JSON_FILE_PATH.as_posix() ) is True else None
+    return 'clear OK.'
 

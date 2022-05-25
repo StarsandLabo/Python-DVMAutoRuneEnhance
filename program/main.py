@@ -808,7 +808,6 @@ for position in equipPositions:
                     
     #print(passedItems)
     print('[ Number of Build up Target ]:', len(passedItems))
-        
             
             #旧プラス判別
             #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
@@ -1102,7 +1101,8 @@ for position in equipPositions:
             else:
                 consumption = "unknown"
             
-            summary_image_file_name = f"Gen-{currentGeneration}_" + f"Date-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_" + f'Position-{equipPosition}_Rarerity-{targetRarerity}_' + f'EstStartMoney-{startMoney}' + '.png'
+            capture_date = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            summary_image_file_name = f"Gen-{currentGeneration}_" + f"Date-{capture_date}_" + f'Position-{equipPosition}_Rarerity-{targetRarerity}_' + f'EstStartMoney-{startMoney}' + '.png'
             
             # 取得したキャプチャを読み込み、トリム、保存する。
             remainingMoney_origin = Image.open(tmpf.name)
@@ -1110,9 +1110,56 @@ for position in equipPositions:
             )
             
             # Line Notify に画像を送信
-            message = summary_image_file_name
+            # Line Notify にアンロック用のURLを送信
+            dest_port  = '8000'
+            server_ip  = f'localhost:{dest_port}'
+            click_x = str( coord[-1][0] )
+            click_y = str( coord[-1][1] )
+            queryparam = "&".join(
+                [
+                    f"?date={capture_date}",
+                    f"pos={str(equipPosition)}",
+                    f"x={click_x}",
+                    f"y={click_y}"
+                ]
+            )
+            
+            unlock_url = "/".join(
+                [
+                    'http:/',
+                    server_ip,
+                    str(PROCESS_GENERATION),
+                    'unlock' + queryparam
+                ]
+            )
+            
+            try:
+                cost = startMoney_Integer - int( GetMoney().replace(".",",").replace(",","") )
+            except:
+                cost = 'unknown'
+            
+            message = "\n".join(
+                [
+                    f'\nest cost: {cost}',
+                    f'unlock url: {unlock_url}'
+                ]
+            )
+            
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
             totalPassedItems += 1
+            
+            
+            #send_line(msg='rune unlock url:\n' + unlock_url, token=lnToken)
+            input('stoppoint: after send line unlock url')
+            """
+            @app.get("/{process_gen}/{call_methods}")
+            async def ReadGen
+                call_methods: PathName_Methods,
+                process_gen: int, 
+                date: str,
+                x: int,
+                y: int,
+            """
             
     ancientRuneScaned = False
     print(f'Loop Finish. Total {totalPassedItems} runes enhanced.\nEstimated Remaining money is under the {startMoney}.')
@@ -1135,3 +1182,13 @@ except ZeroDivisionError:
 
 message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\n{totalPassedItems} Runes enhance completed.\nEstimated Remaining money: {money_when_enhance_completed}\nConsumption/Average: {consumption_userNotify} / {consumption_average}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)
+
+exec_url = "/".join(
+    [
+        'http:/',
+        server_ip,
+        'exec'
+    ]
+)
+
+message = f"Locking Operation URL:\n{exec_url}"

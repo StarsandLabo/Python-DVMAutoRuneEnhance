@@ -44,6 +44,8 @@ permissiveRange = 20
 masterCount     = 0     # 近似座標削除関数で使用するループ回数のカウント変数(再起処理を行うので外部から与えたい。)
 hitPositionList = []    # cv2で取得する、関数に与える座標の配列名。
 
+enable_detection_skip = True
+
 #* basic modules
 import os, pprint, time, statistics, tempfile, datetime, re, requests
 
@@ -692,10 +694,17 @@ for position in equipPositions:
     )
     
     """
+    LOCK_AND_PLUS_JUDGE_LINE = int(8) #8の根拠は1列で並ぶルーン数。(1列がまるまるスキップ続きの場合は以降も強化済みであるだろうという経験則に基づく)
+    lock_and_plus_count = 0 #ロック済み、強化済みのものが続いた時はスキップする。そのためのカウント
     for i, v in enumerate(reducedPositionList):
-        #print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
-        #print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
-        #print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'))
+        
+        #連続不合格のスキップを有効にしていた時、連続でパスできなかった数が続いた場合はbreakする。
+        if enable_detection_skip == True:
+            if lock_and_plus_count >= LOCK_AND_PLUS_JUDGE_LINE:
+                print(f'[ {clr.DARKGREEN}Detection Skip{clr.END} ]: {clr.DARKMAGENTA}The targets that did not pass the judgment were consecutive, and the number exceeded the specified number ({clr.YELLOW}{LOCK_AND_PLUS_JUDGE_LINE}{clr.END}{clr.DARKMAGENTA}), so skipped.{clr.END}')
+                break
+            else:
+                pass
         
         #? testcodes
         geta = 1 if i < 10 else 0
@@ -836,7 +845,8 @@ for position in equipPositions:
                     
                     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
                         fp_logfile.write(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad} Detect: {template_plus.split("/")[-1]}, similarity Max: {ret_plusMatch[1]} Did not pass' + "\n" )
-                    pass
+                    #連続不合格数のカウント
+                    lock_and_plus_count += 1
                     continue
                 else:
                     #print(f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}')
@@ -848,6 +858,9 @@ for position in equipPositions:
                     
                     arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
                     passedItems.append(arr)
+                    
+                    # 連続不合格数をリセット
+                    lock_and_plus_count = 0
                     
         
     #print(passedItems)
@@ -1201,6 +1214,8 @@ print(RESULT_DIR)
 message = f"\n{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}\nEnhanced Total: {totalPassedItems}\n\n[est. Money Info]\nEst Remaining: {money_when_enhance_completed}\nConsumption: {consumption_userNotify}\nAverage: {consumption_average}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)
 
+dest_port  = '8000'
+server_ip  = f'192.168.11.8:{dest_port}'
 message = f'Locking Operation List:\n{"/".join(["http:/", server_ip, "list"])}'
 send_line(msg=message, token=lnToken)
 

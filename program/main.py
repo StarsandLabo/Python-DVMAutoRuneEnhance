@@ -2,7 +2,7 @@ from email.mime import image
 from inspect import getmodule
 import pathlib, sys, datetime
 from pydoc_data.topics import topics
-from tracemalloc import start
+import subprocess
 
 from cv2 import CAP_PROP_APERTURE, cvtColor, reduce
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
@@ -476,6 +476,7 @@ posListIntermidiate = []
 ancientRuneScaned = False
 scanRuneType = 'Standard'
 totalPassedItems = 0
+check_realtime_money = False
 
 #検出領域を確認するか。
 cv2AreaCheck = {
@@ -523,12 +524,18 @@ for position in equipPositions:
     #! 本番は有効
     print(equipPosition)
     print()
-
+    
+    #! 自信ないけどおまじない的な
+    posListIntermidiate = []
+    
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
         fp_logfile.write( datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + f'equipPosition: {equipPosition}' + "\n" )
     pass
     
     while True:
+        
+
+        
         if ancientRuneScaned == True:
             break
         else:
@@ -583,10 +590,10 @@ for position in equipPositions:
             
                 'Standard': {
                     1: 0.575,
-                    2: 0.52,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                    3: 0.525,   # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                    4: 0.525,    # 古代ルーンも行ける。ただし、下2列が間引かれる。
-                    5: 0.525, # 古代ルーンも行ける。ただし、下2列が間引かれる。
+                    2: 0.52,   
+                    3: 0.525,
+                    4: 0.525,
+                    5: 0.525,
                     6: 0.525
                 },
                 'Ancient': {
@@ -671,15 +678,36 @@ for position in equipPositions:
     passedItems = []    # チェックを抜けた座標が格納される。
     # 鍵、プラスチェック
     # 強化画面へ遷移する際は、テストデータを予め用意しておいて対応。
+    
+    #? 出力フォーマット変更用
+    """
+    idx_coords      = f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'
+    indent_length   = len(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
+    lock_result     = f'{clr.DARKGREEN}Detect{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}'
+    plus_result     = f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Did not pass{clr.END}'
+    
+    (
+        idx_coords + lock_result + "\n"\
+        indent_length + plus_result
+    )
+    
+    """
     for i, v in enumerate(reducedPositionList):
-        print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
-        print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
-        print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'))
+        #print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
+        #print(f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]')
+        #print('-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]'))
         
-        with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-            fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
-            fp_logfile.write((f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
-            fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
+        #? testcodes
+        geta = 1 if i < 10 else 0
+        pad = " " * ( ( 25 + geta )- len(f'[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
+        idx_coords      = f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad}'
+        indent_length   = len(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad}')
+        
+        
+        #with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+        #    fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
+        #    fp_logfile.write((f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
+        #    fp_logfile.write( '-' * len( f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') + "\n" )
 
         arr = [v[0], v[1], (v[0] + w), (v[1] + h)]
         
@@ -721,21 +749,27 @@ for position in equipPositions:
                             areacheck = False
                             if areacheck == True: viewDetectArea(inspectionTarget, result_key, template_key_gray)
                         else:
-                            print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
+                            #print(f'{clr.DARKGREEN}Detect{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}')
+                            lock_result = f'{clr.DARKGREEN}Detect{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {clr.CYAN}{result_key[1]}{clr.END}'
                             
                             with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-                                fp_logfile.write(f'Detection target: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]}' + "\n" )
+                                fp_logfile.write(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad} Detect: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]}' + "\n" )
                             pass
                     
                 # 鍵マークのwith を閉じる
                 # 比較結果の信頼値が低い場合は continue する。
                 if result_key[1] <= 0.7:
-                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}, {clr.RED}Lock symbol check did not pass{clr.END}')
+                    #print(f'{clr.DARKGREEN}Detect{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result_key[1]}, {clr.RED}Did not pass{clr.END}')
+                    lock_result = f'{clr.DARKGREEN}Detect{clr.END}: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {clr.DARKMAGENTA}{result_key[1]}{clr.END} {clr.RED}Did not pass{clr.END}'
+                    print(idx_coords, lock_result, sep="")
+                    
                     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-                        fp_logfile.write(f'Detection target: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]},Lock symbol check did not pass' + "\n" )
+                        fp_logfile.write(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad} Detect: {TEMPLATE_IMG_DIR.joinpath("runelist","lock.png").as_posix().split("/")[-1]}, similarity Max: {result_key[1]} Did not pass' + "\n" )
                     pass
                     continue
-                    
+                else:
+                    idx_coords += lock_result
+                
                 #? 現在withで開かれているのは、大本のオリジンと、検査対象(ルーンひとつ分の画像)
                 #? 実際の想定はtmpTrimmedRuneFromOrigin.name
                 def MatchWithOCRGray(templatePath, originPath=None, threshold=None, withoutOCR=True, **kwargs):
@@ -796,51 +830,29 @@ for position in equipPositions:
                 
                 # プラスのマッチ度が高い画像は次の工程に進まない(すでに強化済みという判定)
                 if ret_plusMatch[1] > 0.9:
-                    print(f'{clr.DARKGREEN}Detection target{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Plus symbol check did not pass{clr.END}')
+                    #print(f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}, {clr.RED}Did not pass{clr.END}')
+                    plus_result = f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {clr.DARKMAGENTA}{ret_plusMatch[1]}{clr.END} {clr.RED}Did not pass{clr.END}'
+                    print(idx_coords, plus_result)
+                    
                     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-                        fp_logfile.write(f'Detection target: {template_plus.split("/")[-1]}, similarity Max: {ret_plusMatch[1]}, Plus symbol check did not pass' + "\n" )
+                        fp_logfile.write(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad} Detect: {template_plus.split("/")[-1]}, similarity Max: {ret_plusMatch[1]} Did not pass' + "\n" )
                     pass
                     continue
                 else:
+                    #print(f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]}')
+                    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+                        fp_logfile.write(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad} Detect: {template_plus.split("/")[-1]}, similarity Max: {ret_plusMatch[1]} Pass' + "\n" )
+
+                    plus_result = f'{clr.DARKGREEN}Detect{clr.END}: {template_plus.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {ret_plusMatch[1]} {clr.DARKCYAN}Pass{clr.END}'
+                    print(idx_coords, plus_result)
+                    
                     arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
                     passedItems.append(arr)
                     
-                    
+        
     #print(passedItems)
     print('[ Number of Build up Target ]:', len(passedItems))
             
-            #旧プラス判別
-            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus6.png').as_posix())
-            #input( cv2.minMaxLoc(result_plus) )
-            #
-            #if result_plus[1] >= 0.85:
-            #    if debugmode == True:
-            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check did not pass. maybe already enhanced.')
-            #    continue
-            #
-            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus9.png').as_posix())
-            #if result_plus[1] >= 0.85:
-            #    if debugmode == True:
-            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
-            #    continue
-                #
-            #result_plus = matchTemplate(originPath=equipPositionOriginFilePath, templatePath=TEMPLATE_IMG_DIR.joinpath('runelist','plus12.png').as_posix())
-            #if result_plus[1] >= 0.85:
-            #    if debugmode == True:
-            #        print(f'{clr.DARKMAGENTA}Will not enhance{clr.END} {arr}: Plus symbol check failed. maybe already enhanced.')
-            #    continue
-            #
-            #print(f'{clr.CYAN}Runes proceed to the enhancement process.{clr.END}')
-            #
-            #input()
-            #- 後ろの工程で利用する、強化対象ルーンの中心座標を追加(pyscreeze.center()関数)
-            # pyscreeze モジュールに有るcenter関数を借りて、クリックしたいPoint(x, y)を得る。
-            #def center(coords):
-            #    
-            #    Returns a `Point` object with the x and y set to an integer determined by the format of `coords`.
-            #
-            #    The `coords` argument is a 4-integer tuple of (left, top, width, height).
-            #arr.append( pysc.center( (arr[0], arr[1], w, h) ) )
         #passedItems.append(arr)
     
     
@@ -898,7 +910,7 @@ for position in equipPositions:
                 w, h = template_gray.shape[::-1]
                 # テンプレートマッチング
                 result = cv2.minMaxLoc( cv2.matchTemplate(origin_gray_trimed, template_gray, cv2.TM_CCOEFF_NORMED) )
-                print(f'{clr.DARKGREEN}Detection target{clr.END}: {templatePath.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
+                print(f'{clr.DARKGREEN}Detect{clr.END}: {templatePath.split("/")[-1]}, {clr.DARKYELLOW}similarity Max{clr.END}: {result[1]}')
                 
                 # 表示
                 if watchResult == True:
@@ -1014,6 +1026,7 @@ for position in equipPositions:
 
         startMoney = GetMoney()
         startMoney = startMoney.replace(".","").replace(",","")
+        startMoneySingleRune = int( startMoney )
 
         consumption = None
         
@@ -1047,22 +1060,26 @@ for position in equipPositions:
             # 監視間隔が密だと負荷が増えるため、sleepを置く
             time.sleep(0.5)
             
-
+            
             matchResult = tmpMatchTemplate(
                 color='color', 
                 template=TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()
             )
             
-            print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END},Match rate: {matchResult[1]}')
-            # トリミング
-            currentMoney = GetMoney()
-            currentMoney.replace(".","").replace(",","")
-            
-            # トリミング結果に更に数字以外のものが含まれていたら例外的な処理をする。
-            if type(currentMoney) is int:
-                consumption = int(currentMoney) - int(startMoney)
+            if check_realtime_money == True:
+                print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec, Consumption amount: {clr.RED}{consumption}{clr.END},Match rate: {matchResult[1]}') # リアルタイムで金額取得を試みる場合
+                # 所持金取得
+                
+                currentMoney = GetMoney()
+                currentMoney.replace(".","").replace(",","")
+                
+                # トリミング結果に更に数字以外のものが含まれていたら例外的な処理をする。
+                if type(currentMoney) is int:
+                    consumption = int(currentMoney) - int(startMoney)
+                else:
+                    consumption = 'Sorry. current cache could not detect well.'
             else:
-                consumption = 'Sorry. current cache could not detect well.'
+                print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec\r')
             
             #print(f"remaining money: {TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
             
@@ -1071,7 +1088,7 @@ for position in equipPositions:
             else:
                 continue
         
-        print(f'Consumption amount: {clr.RED}{consumption}{clr.END}')
+        #print(f'Consumption amount: {clr.RED}{consumption}{clr.END}')
         
         pag.click( GetClickPosition(debug=debugmode,**clcd.ReturnLuneList) ); time.sleep(1) # 終了時は元の画面に戻る。sleepは調整用
         
@@ -1112,7 +1129,7 @@ for position in equipPositions:
             # Line Notify に画像を送信
             # Line Notify にアンロック用のURLを送信
             dest_port  = '8000'
-            server_ip  = f'localhost:{dest_port}'
+            server_ip  = f'192.168.11.8:{dest_port}'
             click_x = str( coord[-1][0] )
             click_y = str( coord[-1][1] )
             queryparam = "&".join(
@@ -1134,7 +1151,7 @@ for position in equipPositions:
             )
             
             try:
-                cost = startMoney_Integer - int( GetMoney().replace(".",",").replace(",","") )
+                cost = startMoneySingleRune - int( GetMoney().replace(".",",").replace(",","") )
             except:
                 cost = 'unknown'
             
@@ -1148,9 +1165,7 @@ for position in equipPositions:
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
             totalPassedItems += 1
             
-            
-            #send_line(msg='rune unlock url:\n' + unlock_url, token=lnToken)
-            input('stoppoint: after send line unlock url')
+            #input('stoppoint: after send line unlock url')
             """
             @app.get("/{process_gen}/{call_methods}")
             async def ReadGen
@@ -1180,15 +1195,9 @@ try:
 except ZeroDivisionError:
     consumption_average = 0
 
-message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\n{totalPassedItems} Runes enhance completed.\nEstimated Remaining money: {money_when_enhance_completed}\nConsumption/Average: {consumption_userNotify} / {consumption_average}"
+message = f"\n{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}\nEnhanced Total: {totalPassedItems}\n\n[Money Info]\nEst Remaining: {money_when_enhance_completed}\nConsumption: {consumption_userNotify}\nAverage: {consumption_average}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)
 
-exec_url = "/".join(
-    [
-        'http:/',
-        server_ip,
-        'exec'
-    ]
-)
-
-message = f"Locking Operation URL:\n{exec_url}"
+# サーバを建てる
+#os.chdir(PROJECT_DIR.joinpath('program', 'fastapi'))
+#subprocess.run("uvicorn main:app --host 0.0.0.0 --port 8000 --reload", shell = True)

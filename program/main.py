@@ -699,8 +699,8 @@ for position in equipPositions:
         
         #? testcodes
         geta = 1 if i < 10 else 0
-        pad = " " * ( ( 25 + geta )- len(f'[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
-        idx_coords      = f'{clr.DARKRED}idx{clr.END}: {i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad}'
+        pad = " " * ( ( 25 ) - len(f'[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]') )
+        idx_coords      = f'{clr.DARKRED}idx{clr.END}: {" " * geta}{i}, {clr.DARKYELLOW}targetCoordinates{clr.END}:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad}'
         indent_length   = len(f'idx: {i}, targetCoordinates:[{v[0]}, {v[1]}, {v[0] + w}, {v[1] + h}]{pad}')
         
         
@@ -866,6 +866,7 @@ for position in equipPositions:
     for coord in passedItems:
         # 強化画面に遷移する。テスト済み
         if True == True:
+            print("-" * 64)
             toTargetClick(coord[-1], 0, debug=debugmode, sceneName='PassedItemSelect')    #本番は利用する
             pag.click( GetClickPosition(debug=debugmode,**clcd.EnterEnhance) );time.sleep(2)            #本番は利用する
         
@@ -1079,7 +1080,7 @@ for position in equipPositions:
                 else:
                     consumption = 'Sorry. current cache could not detect well.'
             else:
-                print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec\r')
+                print(f'Elapsed time: {int( time.time() - EnhanceStartTime)} sec',end="\r")
             
             #print(f"remaining money: {TEMPLATE_IMG_DIR.joinpath('enhance',f'enhanced_{MagicNumberTable[targetRarerity]}.png').as_posix()}, {matchResult}, {matchResult[1]}")
             
@@ -1149,7 +1150,7 @@ for position in equipPositions:
                     'unlock' + queryparam
                 ]
             )
-            
+            "/".join(['http:/', server_ip, 'list'])
             try:
                 cost = startMoneySingleRune - int( GetMoney().replace(".",",").replace(",","") )
             except:
@@ -1177,16 +1178,11 @@ for position in equipPositions:
             """
             
     ancientRuneScaned = False
-    print(f'Loop Finish. Total {totalPassedItems} runes enhanced.\nEstimated Remaining money is under the {startMoney}.')
+    #print(f'{clr.DARKRED}Loop Finish{clr.END}\nEnhanced Total: {totalPassedItems}\nest. Remaining money: {startMoney}\nAverage: ')
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
         fp_logfile.write(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + 'loop finish.' + "\n\n" )
     pass
 
-print('The Report and Results are here.')
-print(RESULT_DIR)
-
-# send line notify after build up.
-# スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
 money_when_enhance_completed = GetMoney().replace(".",",")
 money_when_enhance_completed_integer = int( money_when_enhance_completed.replace(",","") )
 consumption_userNotify = (startMoney_Integer - money_when_enhance_completed_integer)
@@ -1195,8 +1191,18 @@ try:
 except ZeroDivisionError:
     consumption_average = 0
 
-message = f"\n{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}\nEnhanced Total: {totalPassedItems}\n\n[Money Info]\nEst Remaining: {money_when_enhance_completed}\nConsumption: {consumption_userNotify}\nAverage: {consumption_average}"
+print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}\nEnhanced Total: {clr.YELLOW}{totalPassedItems}{clr.END}\n\n[Estimated Money Info]\nRemaining: {money_when_enhance_completed}\nConsumption: {consumption_userNotify}\nAverage: {consumption_average}\n")
+print('The Report and Results are here.')
+print(RESULT_DIR)
+
+# send line notify after build up.
+# スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
+
+message = f"\n{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}\nEnhanced Total: {totalPassedItems}\n\n[est. Money Info]\nEst Remaining: {money_when_enhance_completed}\nConsumption: {consumption_userNotify}\nAverage: {consumption_average}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=10979904)
+
+message = f'Locking Operation List:\n{"/".join(["http:/", server_ip, "list"])}'
+send_line(msg=message, token=lnToken)
 
 # サーバを建てる
 #os.chdir(PROJECT_DIR.joinpath('program', 'fastapi'))

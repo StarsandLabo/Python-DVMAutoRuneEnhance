@@ -3,8 +3,9 @@ from subprocess import call
 from enum import Enum
 import re, datetime, pprint, os
 import tempfile
-from tkinter.filedialog import askopenfile
-from unittest import result
+
+
+
 
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
@@ -42,6 +43,8 @@ JSON_FILE_PATH = JSON_SAVE_DIR.joinpath(JSON_FILE_NAME)
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 from tools.clickcondition import ClickCondition as clcd
 import pyautogui as pag
 import cv2
@@ -50,6 +53,9 @@ from tools.ScreenCapture_pillow import ScreenCapture
 import tools.line_submit_tools as linetools
 from tools.TerminalColors import TerminalColors as tc
 import json
+import psutil
+
+#os.chdir(PROJECT_DIR.joinpath('program', 'fastapi').as_posix())
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
 fg = tc.fg #フォアグラウンド 色つけ用
@@ -158,7 +164,7 @@ async def ReadGen(
         # resultsの配列が1つ以上の時、同じファイル名が含まれているか確認し、含まれていれば何もしない。
             # len(results) == 0:
         try:
-            print(results)
+            print('try statement', results)
         except:
             pass
         
@@ -188,8 +194,14 @@ async def ReadGen(
             with open(JSON_FILE_PATH.as_posix(), 'r') as jfp:
                 documents = jfp.read()
                 
+            # 既に同じルーンが入っている時は、配列から取り除く。
             if list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() in documents:
-                pass
+                targetFileName = list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix()
+                index = [ i for i, v in enumerate(results) if v['file'] == targetFileName ]
+                results.pop(index[0])
+                with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
+                    json.dump(results, jf, indent=4)
+                    jf.close()
             else:
                 results.append(
                     {
@@ -206,67 +218,33 @@ async def ReadGen(
                     json.dump(results, jf, indent=4)
                     jf.close()
             
-        """
-        try:
-            if len(results) > 1:
-                duplicate_check = list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0] in results[0].values()
-        except:
-            duplicate_check = ""
-            pass # リストの中に一つもないようであればIndex Errorが出るのでこれはOK
-            
-        try:
-            duplicate_check
-        except:
-            results.append(
-                {
-                    'Process_gen' : process_gen,
-                    'call_method' : call_methods.value,
-                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
-                    'position' : pos , 
-                    'coord_x': x,
-                    'coord_y': y
-                }
-            )
-            
-            with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
-                json.dump(results, jf, indent=4)
-                jf.close() 
-            return results
-        
-        if duplicate_check:
-            pass
-        else:
-            results.append(
-                {
-                    'Process_gen' : process_gen,
-                    'call_method' : call_methods.value,
-                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
-                    'position' : pos , 
-                    'coord_x': x,
-                    'coord_y': y
-                }
-            )
-            
-            with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
-                json.dump(results, jf, indent=4)
-                jf.close()
-        """
         
         pprint.pprint(results)
         
-        return results
+        return RedirectResponse('http://192.168.11.8:8000/list')
 
 @app.get("/exec")
-async def LockAccess():
-    #global results
-    #pprint.pprint(results)
+def LockAccess():
+    global results
+    
+    #print(fg.DARKRED, datetime.datetime.now().strftime('%Y%m%d %H%M%S') , fg.END)
+    
+    success_items_count = 0
+    failed_items_count = 0
+    
+    success_items = []
+    failed_items  = []
     
     with open(JSON_FILE_PATH.as_posix(), 'r') as jf:
-        results = json.load(jf)
-        jf.close()
+        try:
+            results = json.load(jf)
+        except:
+            return 'target not found 1.'
+        finally:
+            jf.close()
     
     if len(results) == 0:
-        return 'target not found.'
+        return 'target not found 2.'
     
     for record in results:
         
@@ -300,24 +278,65 @@ async def LockAccess():
                 matchResult = cv2.minMaxLoc( cv2.matchTemplate(origin, template, cv2.TM_CCOEFF_NORMED) )
                 print('[ TemplateMatching Result ]', matchResult)
             
-            if matchResult[1] < 0.3: #本番は変更したほうが良いかも0.98とか
-                return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'content': 'Template Matching', 'message': f'Matched Rate Failue {matchResult[1]}'}
-            
+            if matchResult[1] < 0.80: #本番は変更したほうが良いかも0.98とか
+                failed_items_count += 1
+                failed_items.append(f'<li>{record["file"]}</li><br>')
+                
+                #return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'content': 'Template Matching', 'message': f'Matched Rate Failue {matchResult[1]}'}
+            else:
             # 引数(unlock, lock, invert)に応じてロックマークの操作をする
-            LockMarkOperation(record['call_method'], record['file'])
-                # サマリエリアのマークを見て、既に希望の状態（unlock だったらロック解除されている）であれば何もしない。
-                # invertは問答無用でクリックする。
-                # 正確性が不明なので、安定してると言えるまではキャプチャをとって送信。
+                LockMarkOperation(record['call_method'], record['file'])
+                    # サマリエリアのマークを見て、既に希望の状態（unlock だったらロック解除されている）であれば何もしない。
+                    # invertは問答無用でクリックする。
+                    # 正確性が不明なので、安定してると言えるまではキャプチャをとって送信。
+                success_items_count += 1
+                success_items.append(f'<li>{record["file"]}</li><br>')
+            
     print(fg.DARKRED, 'json remove point', fg.END)
-    results = None
+    results = []
     with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
-        jf.write("")
+        jf.write("".join(results))
         jf.close()
+    return HTMLResponse(
+        '<hr>'
+    )
 
 @app.get("/clear")
 async def ClearArray():
     global results
     results = None
     os.remove( JSON_FILE_PATH.as_posix() ) if os.path.isfile(JSON_FILE_PATH.as_posix() ) is True else None
-    return 'clear OK.'
+    return HTMLResponse(
+        """
+        'clear OK.'<br>
+        <a href="http://192.168.11.8:8000/list">Return to List</a><br>
+        """
+    )
 
+@app.get("/list")
+async def ViewReceivedContent():
+    try:
+        view_content = "<br>".join( [ f'<li><a href="image/result/\
+        {pathlib.Path(v["file"]).name}\
+            ">{v["file"]}</a></li>' for v in results] )
+    except:
+        view_content = ""
+
+    return HTMLResponse(f"""
+        Locking Operation: <a href="http://192.168.11.8:8000/exec">Run Locking Operation</a><br>
+        List Clear: <a href="http://192.168.11.8:8000/clear">List Clear API</a><br>
+        <hr>
+        Target Items {len(results)}<br>
+        {view_content}
+        """
+    )
+
+"""
+@app.get("/exit")
+def exit_uvicorn():
+    for p in psutil.process_iter():
+        if 'uvicorn' in p.name() or 'uvicorn' in ' '.join(p.cmdline()):
+            p.terminate()
+            p.wait()
+    return sys.exit()
+"""

@@ -1,7 +1,7 @@
 import pathlib, sys
 from subprocess import call
 from enum import Enum
-import re, datetime, pprint, os
+import re, datetime, pprint, os, shutil
 import tempfile
 
 
@@ -54,7 +54,7 @@ import tools.line_submit_tools as linetools
 from tools.TerminalColors import TerminalColors as tc
 import json
 import psutil
-
+import queue
 #os.chdir(PROJECT_DIR.joinpath('program', 'fastapi').as_posix())
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
@@ -69,6 +69,8 @@ class PathName_Methods(str, Enum):
 app = FastAPI()
 
 results = []
+q = queue.Queue()
+
 #jsonファイルが無い時は作成する。
 def CheckJSON():
     if not JSON_FILE_PATH.exists():
@@ -77,6 +79,10 @@ def CheckJSON():
             fp.close()
 
 CheckJSON()
+
+# 画像退避先の確認と作成。
+if not RESULT_DIR.joinpath('AfterLockingOperation', 'divert', 'images').exists():
+    RESULT_DIR.joinpath('AfterLockingOperation', 'divert', 'images').mkdir(exist_ok=False, parents=True)
 
 def EquipPositionClickFromImage(number, confidence=0.9):
     print(f'[ {sys._getframe().f_code.co_name} ] Start {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
@@ -122,6 +128,7 @@ def LockMarkOperation(mode, filepath):
         pag.click(
             pag.locateCenterOnScreen(template_lockpath)
         )
+        shutil.move(filepath, RESULT_DIR.joinpath('AfterLockingOperation', 'divert', 'images'))
     else:
         print(f'[ {sys._getframe().f_code.co_name} ] Locking Operation: ', 'False')
         pass
@@ -235,6 +242,8 @@ def LockAccess():
     success_items = []
     failed_items  = []
     
+    # 画像ファイルの退避先確認
+    
     with open(JSON_FILE_PATH.as_posix(), 'r') as jf:
         try:
             results = json.load(jf)
@@ -328,15 +337,23 @@ async def ViewReceivedContent():
         <hr>
         Target Items {len(results)}<br>
         {view_content}
+        <br><hr>Server Terminate: <a href="http://192.168.11.8:8000/exit">Server Terminate</a><br>
         """
     )
 
-"""
+
 @app.get("/exit")
 def exit_uvicorn():
-    for p in psutil.process_iter():
-        if 'uvicorn' in p.name() or 'uvicorn' in ' '.join(p.cmdline()):
-            p.terminate()
-            p.wait()
-    return sys.exit()
-"""
+    print(bg.DARKMAGENTA, 'Receive signal self process terminate.', bg.END)
+    
+    # 親プロセスのPID取得
+    self_pid = os.getpid()
+    Pprocess = psutil.Process(self_pid)
+    
+    # 関連子プロセスのPID群を取得,終了
+    pid_list = [pc.pid for pc in Pprocess.children(recursive=True)]
+    for pid in pid_list:
+        psutil.Process(pid).terminate()
+    
+    # よくわからないが reloader processというのも一緒に消さないと次回サーバがうまく建てられない。watchgodと名前がついてるので関連する別プロセス？
+    [psutil.Process(v.pid).terminate() for v in psutil.process_iter() if v.name() == 'uvicorn']

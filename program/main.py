@@ -3,6 +3,7 @@ from inspect import getmodule
 import pathlib, sys, datetime
 from pydoc_data.topics import topics
 import subprocess
+from tracemalloc import start
 
 from cv2 import CAP_PROP_APERTURE, cvtColor, reduce
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
@@ -18,6 +19,11 @@ TEMPLATE_IMG_DIR = RESOURCE_DIR.joinpath('img', 'template')
 
 RESULT_DIR = PROJECT_DIR.joinpath('result')
 
+# 実行世代間利用
+PROCESS_GENERATION_FILE_DIR  = PROJECT_DIR.joinpath('Generation')
+PROCESS_GENERATION_FILE_NAME = 'GenerationFile'
+PROCESS_GENERATION           = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+
 LOG_FILE_NAME = "".join(
     [
         'RuneEnhanceAutomated_MainLog.log'
@@ -25,19 +31,23 @@ LOG_FILE_NAME = "".join(
 )
 DETECTION_LOG_FILE_NAME = "".join(
     [
-        'RuneEnhanceAutomated_DetectionLog_', 
-        datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
+        'RuneEnhanceAutomated_DetectionLog_Gen-', 
+        PROCESS_GENERATION,
         '.log'
     ]
 )
+BUILDUP_LOG_FILE_NAME = "".join(
+    [
+        'RuneEnhanceAutomated_BuildupLog', 
+        '.log'
+    ]
+)
+
+DETECTION_LOG_DIR = RESULT_DIR.joinpath('DetectionLog')
+
 LOG_FILE_PATH = RESULT_DIR.joinpath(LOG_FILE_NAME).as_posix()
-DETECTION_LOG_FILE_PATH = RESULT_DIR.joinpath(DETECTION_LOG_FILE_NAME).as_posix()
-
-
-# 実行世代間利用
-PROCESS_GENERATION_FILE_DIR  = PROJECT_DIR.joinpath('Generation')
-PROCESS_GENERATION_FILE_NAME = 'GenerationFile'
-PROCESS_GENERATION           = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+DETECTION_LOG_FILE_PATH = DETECTION_LOG_DIR.joinpath(DETECTION_LOG_FILE_NAME).as_posix()
+BUILDUP_LOG_FILE_PATH = RESULT_DIR.joinpath(BUILDUP_LOG_FILE_NAME).as_posix()
 
 GENYMOTION_FHD_DPI640_RUNESUMMARY_WIDTH = 839 # 639 でコメントなしになる。
 GENYMOTION_FHD_DPI640_RUNESUMMARY_HEIGHT = 652
@@ -382,8 +392,15 @@ def GetProcessGeneration():
             
         return PROCESS_GENERATION
 
+# サーバを建てる
+os.chdir(PROJECT_DIR.joinpath('program', 'fastapi'))
+subprocess.Popen([f"{PROJECT_DIR.joinpath('bin').as_posix()}/uvicorn", 'main:app', "--host", "0.0.0.0", "--port", "8000", "--reload"], shell = False)
 
-os.chdir(PROJECT_DIR)
+os.chdir(PROJECT_DIR.as_posix())
+
+if not DETECTION_LOG_DIR.exists():
+    DETECTION_LOG_DIR.mkdir(exist_ok=False, parents=True)
+
 try:
     with open(LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
         pass
@@ -396,10 +413,29 @@ try:
 except:
     pass
 
+buildup_title =  "\t".join( ['Date', 'Gen', 'Pos', 'Up', 'Down', 'Right', 'Target','Rarerity', 'estCost', 'Filepath'] ) + "\n"
+try:
+    with open(BUILDUP_LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
+        fp_logfile.write(buildup_title)
+        pass
+except:
+    pass
 
 currentGeneration = GetProcessGeneration()
 print('ProcessGeneration:', currentGeneration)
 
+# サーバを建てる
+os.chdir(PROJECT_DIR.joinpath('program', 'fastapi'))
+try:
+    subprocess.Popen([f"{PROJECT_DIR.joinpath('bin').as_posix()}/uvicorn", 'main:app', "--host", "0.0.0.0", "--port", "8000", "--reload"], shell = False)
+    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+        fp_logfile.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")} Run uvicorn\n')
+except:
+    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
+        fp_logfile.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")} Run uvicorn failed.\n')
+        pass
+
+os.chdir(PROJECT_DIR.as_posix())
 
 #? testcodes
 """
@@ -477,7 +513,7 @@ lnToken = getToken()
 
 
 #+ 画面遷移
-
+    
 #print(clcd.EnterRuneList, type(clcd.EnterRuneList))
 if True == False:
     pag.click( GetClickPosition(debug=True, **clcd.OpenListMenu) ) # リストメニューを開く
@@ -533,7 +569,10 @@ def tmpmatch():
 
 startMoney = GetMoney()
 startMoney = startMoney.replace(".",",")
-startMoney_Integer = int( startMoney.replace(",", "") )
+try:
+    startMoney_Integer = int( startMoney.replace(",", "") )
+except:
+    startMoney_Integer = 0
 
 message = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}:\nStart Enhance\nProcess Gen: {currentGeneration}\nEstimated Remaining Money: {startMoney}"
 send_line_with_sticker(msg=message, token=lnToken, package_id=11539, sticker_id=52114110)
@@ -676,7 +715,8 @@ for position in equipPositions:
 
     if debugmode == True:
         print(f'[{clr.DARKGREEN}matchTemplateResult{clr.END}] count:{len(posListIntermidiate)}, threshold: {threshold}')
-
+    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
+        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Coords before reduce {posListIntermidiate_count}\n")
     # 近似する値を削除していく。
     masterCount = 0
     #reducedPositionList = rod.reduceOverDetectedCoordinates(masterPositionList=posListIntermidiate, count=masterCount, permissive=permissiveRange)
@@ -685,14 +725,11 @@ for position in equipPositions:
     #import pyperclip
     #pyperclip.copy(str(posListIntermidiate))
     #input('pyperclip captured point')
-    with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} GetUniqueCoordinates Start\n")
-        
     reducedPositionList = GetUniqueCoordinates(posListIntermidiate, templateImagePath=templatePath, permissiveRate=50)
     #? reducedPositionList = testGetUniqueCoordinates(posListIntermidiate, templateImagePath=templatePath, permissiveRate=50) testmodule
 
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} GetUniqueCoordinates Finish\n")
+        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Coords after reduce {len(reducedPositionList)}\n")
 
     
     if cv2AreaCheck['afterReduceDuplicatedArea'] == True:
@@ -712,8 +749,7 @@ for position in equipPositions:
         print(f'[{clr.DARKGREEN}reduceOverDetectedCoordinates{clr.END}] Result: {clr.RED}{( len(reducedPositionList) - posListIntermidiate_count)  * -1 }{clr.END} items reduced.')
     
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Detected Total: {len(reducedPositionList)}\n")
-        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Reduced Total: {len(reducedPositionList) - posListIntermidiate_count}\n")    
+        fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Detected Total {len(reducedPositionList)}\n")
     
     #input()
     #+ +++++++++++ 配列に格納されている座標のルーンが、強化してもよいかどうか判別する。++++++++++++
@@ -750,7 +786,11 @@ for position in equipPositions:
             if lock_and_plus_count >= LOCK_AND_PLUS_JUDGE_LINE:
                 print(f'[ {clr.DARKGREEN}Detection Skip{clr.END} ]: {clr.DARKMAGENTA}The targets that did not pass the judgment were consecutive, and the number exceeded the specified number ({clr.YELLOW}{LOCK_AND_PLUS_JUDGE_LINE}{clr.END}{clr.DARKMAGENTA}), so skipped.{clr.END}')
                 with open(DETECTION_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-                    fp_logfile.write(f'The targets that did not pass the judgment were consecutive, and the number exceeded the specified number ({LOCK_AND_PLUS_JUDGE_LINE}), so skipped.\n')
+                    fp_logfile.write('{0}The targets that did not pass the judgment were consecutive, and the number exceeded the specified number ({1}), so skipped.\n'.format(
+                            "\t" * (len(title) - 1),
+                            LOCK_AND_PLUS_JUDGE_LINE
+                        )
+                    )
                 break
             else:
                 pass
@@ -1056,9 +1096,6 @@ for position in equipPositions:
         #targetRarerity = rarerityJudgeTable[len(detectResult)] # 第2次レアリティ判別
         
         print(f"[ Target Rune rarerity ]: {rarerityColor[targetRarerity]}{targetRarerity}{clr.END} ")
-        with open(DETECTION_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
-            fp_logfile.write(f"[ Target Rune rarerity ]: {targetRarerity}" + "\n" )
-        pass
         #強化を押す直前まで設定する。
         pag.click( GetClickPosition(debug=debugmode,**clcd.RepeatCheck) ) # 繰り返しメニューの選択  本番は有効に
         
@@ -1081,7 +1118,7 @@ for position in equipPositions:
         #TEMPLATE_IMG_DIR.joinpath('enhance',rarerityMagicNumbers[targetRarerity['rarerity']]
         
         with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-            fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Start Single Rune Enhance")
+            fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Start Single Rune Enhance [{','.join([str(v) for v in coord[0:4]])}]\n")
         
         # 現在の強化状態を確認してレアリティに即したレベルまで強化されている確認する。
         #+ 意外にも類似率はばらつきがあり、かつ95といった高い数値ではなかった。
@@ -1132,6 +1169,7 @@ for position in equipPositions:
                 'RARE': 6,
                 'COMMON': 3
         }
+        
         while True:
             
             # 監視間隔が密だと負荷が増えるため、sleepを置く
@@ -1239,9 +1277,18 @@ for position in equipPositions:
                 ]
             )
             
-            with open(DETECTION_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-                fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Coords({','.join([str(v) for v in coord[0:4]])}), {targetRarerity}, {cost}, {summary_image_file_name}, {unlock_url}\n")
-            
+            with open(BUILDUP_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
+                #fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}, {PROCESS_GENERATION}, {'\t'.join([str(v) for v in coord[0:4]])}), {targetRarerity}, {cost}, {summary_image_file_name}]")
+                fp.write("{date}\t{processgen}\t{position}\t{coords}\t{targetRarerity}\t{cost}\t{summary_image_file_name}\n".format(
+                        date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
+                        processgen = PROCESS_GENERATION,
+                        position = equipPosition,
+                        coords = '\t'.join( [str(v) for v in coord[0:4]] ),
+                        targetRarerity = targetRarerity,
+                        cost = cost,
+                        summary_image_file_name = summary_image_file_name
+                    )
+                )
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
             totalPassedItems += 1
             
@@ -1272,11 +1319,11 @@ print(RESULT_DIR)
 
 with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
     fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Enhanced Total: {totalPassedItems}\n")
-    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Estimated Money Info\n")
-    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Start       : {startMoney}\n")
-    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Remaining   : {money_when_enhance_completed}\n")
-    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Consumption : {consumption_userNotify}\n")
-    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}   - Average : {consumption_average}\n")
+    fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')} Estimated Money (")
+    fp.write(f"Start: {startMoney} ")
+    fp.write(f"Remaining: {money_when_enhance_completed} ")
+    fp.write(f"Consumption: {consumption_userNotify} ")
+    fp.write(f"Average: {consumption_average})\n")
 
 # send line notify after build up.
 # スタンプ送信は遊んでいるわけではなく、終了地点を視覚的にわかりやすくするため。
@@ -1288,9 +1335,4 @@ dest_port  = '8000'
 server_ip  = f'192.168.11.8:{dest_port}'
 message = f'Locking Operation List:\n{"/".join(["http:/", server_ip, "list"])}'
 send_line(msg=message, token=lnToken)
-
-# サーバを建てる
-#os.chdir(PROJECT_DIR.joinpath('program', 'fastapi'))
-#subprocess.run("uvicorn main:app --host 0.0.0.0 --port 8000 --reload", shell = True)
-
 

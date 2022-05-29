@@ -41,7 +41,7 @@ JSON_SAVE_DIR  = PROJECT_DIR.joinpath('program','fastapi')
 JSON_FILE_NAME = 'results.json'
 JSON_FILE_PATH = JSON_SAVE_DIR.joinpath(JSON_FILE_NAME)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.responses import RedirectResponse
 from fastapi.responses import HTMLResponse
@@ -55,11 +55,15 @@ from tools.TerminalColors import TerminalColors as tc
 import json
 import psutil
 import queue
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 #os.chdir(PROJECT_DIR.joinpath('program', 'fastapi').as_posix())
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
 fg = tc.fg #フォアグラウンド 色つけ用
 bg = tc.bg #バックグラウンド 色つけ用
+
+templates = Jinja2Templates(directory="templates")
 
 class PathName_Methods(str, Enum):
     unlock = 'unlock'
@@ -67,6 +71,10 @@ class PathName_Methods(str, Enum):
     invert = 'invert'
 
 app = FastAPI()
+app.mount('/result', StaticFiles(directory="/home/starsand/DVM-AutoRuneEnhance/result"), name='result')
+#app.mount('/templates', StaticFiles(directory="templates"), name='static')
+app.mount('/static', StaticFiles(directory="static"), name='static')
+
 
 results = []
 q = queue.Queue()
@@ -184,7 +192,8 @@ async def ReadGen(
                     'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
                     'position' : pos , 
                     'coord_x': x,
-                    'coord_y': y
+                    'coord_y': y,
+                    'id' : "0"
                 }
             )
             
@@ -217,7 +226,8 @@ async def ReadGen(
                         'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix() ,
                         'position' : pos , 
                         'coord_x': x,
-                        'coord_y': y
+                        'coord_y': y,
+                        'id' : {str(len(results))}
                     }
                 )
                 
@@ -231,7 +241,7 @@ async def ReadGen(
         return RedirectResponse('http://192.168.11.8:8000/list')
 
 @app.get("/exec")
-def LockAccess():
+def LockAccess(request: Request):
     global results
     
     #print(fg.DARKRED, datetime.datetime.now().strftime('%Y%m%d %H%M%S') , fg.END)
@@ -306,20 +316,18 @@ def LockAccess():
     with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
         jf.write("".join(results))
         jf.close()
-    return HTMLResponse(
-        '<hr>'
+    return templates.TemplateResponse('dev/index.html', {
+        "request": request
+        }
     )
-
 @app.get("/clear")
-async def ClearArray():
+async def ClearArray(request: Request):
     global results
     results = None
     os.remove( JSON_FILE_PATH.as_posix() ) if os.path.isfile(JSON_FILE_PATH.as_posix() ) is True else None
-    return HTMLResponse(
-        """
-        'clear OK.'<br>
-        <a href="http://192.168.11.8:8000/list">Return to List</a><br>
-        """
+    return templates.TemplateResponse('dev/index.html', {
+        "request": request
+        }
     )
 
 @app.get("/list")
@@ -327,7 +335,7 @@ async def ViewReceivedContent():
     try:
         view_content = "<br>".join( [ f'<li><a href="image/result/\
         {pathlib.Path(v["file"]).name}\
-            ">{v["file"]}</a></li>' for v in results] )
+            ">{v["file"]}</a> Operation: {v["call_method"]}</li>' for v in results] )
     except:
         view_content = ""
 
@@ -357,3 +365,25 @@ def exit_uvicorn():
     
     # よくわからないが reloader processというのも一緒に消さないと次回サーバがうまく建てられない。watchgodと名前がついてるので関連する別プロセス？
     [psutil.Process(v.pid).terminate() for v in psutil.process_iter() if v.name() == 'uvicorn']
+
+@app.get("/dev")
+def viewtemplate(request: Request):
+    global results
+    if type(results) == None or len(results) == 0:
+        results = [
+            {'process_gen': '20220528131051', 'file': 'Gen-20220528131051_Date-2022-05-28-13-12-48_Position-6_Rarerity-RARE_EstStartMoney-35661404.png', 'call_method': 'unlock', 'date': '2022-05-28-13-12-48', 'position': '6', 'coord_x': '0','coord_y': '0', 'id': "1"},
+            {'process_gen': '20220528131051', 'file': 'Gen-20220528131051_Date-2022-05-28-13-12-48_Position-6_Rarerity-RARE_EstStartMoney-35661404.png', 'call_method': 'unlock', 'date': '2022-05-28-13-12-48', 'position': '6', 'coord_x': '0','coord_y': '0', 'id': "2"},
+        ]
+    #print(results['file'])
+    return templates.TemplateResponse('dev/index.html', {
+        "request": request,
+        "dicts"  : results
+        }
+    )
+
+@app.get("/dev/actionlist")
+def actionlist(request: Request):
+    return templates.TemplateResponse('dev/index.html', {
+        "request": request
+        }
+    )

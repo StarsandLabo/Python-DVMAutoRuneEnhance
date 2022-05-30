@@ -45,6 +45,7 @@ BUILDUP_LOG_FILE_NAME = "".join(
 
 DETECTION_LOG_DIR = RESULT_DIR.joinpath('DetectionLog')
 
+RECENT_ENHANCED_LIST_PATH = RESULT_DIR.joinpath('RecentEnhancedList.json').as_posix()
 LOG_FILE_PATH = RESULT_DIR.joinpath(LOG_FILE_NAME).as_posix()
 DETECTION_LOG_FILE_PATH = DETECTION_LOG_DIR.joinpath(DETECTION_LOG_FILE_NAME).as_posix()
 BUILDUP_LOG_FILE_PATH = RESULT_DIR.joinpath(BUILDUP_LOG_FILE_NAME).as_posix()
@@ -413,7 +414,7 @@ try:
 except:
     pass
 
-buildup_title =  "\t".join( ['Date', 'Gen', 'Pos', 'Up', 'Down', 'Right', 'Target','Rarerity', 'estCost', 'Filepath'] ) + "\n"
+buildup_title =  "\t".join( ['Date', 'Gen', 'Pos', 'Left', 'Up', 'Down', 'Right', 'Target','Rarerity', 'estCost', 'Filepath'] ) + "\n"
 try:
     with open(BUILDUP_LOG_FILE_PATH, mode='x', encoding='utf-8') as fp_logfile:
         fp_logfile.write(buildup_title)
@@ -593,6 +594,8 @@ title = [
 
 with open(DETECTION_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
     fp_logfile.write('\t'.join(title) + "\n")
+
+recent_enhanced_list_json = []
 
 for position in equipPositions:
     with open(LOG_FILE_PATH, mode='a', encoding='utf-8') as fp_logfile:
@@ -1290,8 +1293,22 @@ for position in equipPositions:
                     )
                 )
             send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
-            totalPassedItems += 1
             
+            
+            totalPassedItems += 1
+
+            recent_enhanced_list_json.append(
+                {
+                    'Process_gen' : str(currentGeneration),
+                    'file'        : summary_image_file_name,
+                    'lock'        : 'True',
+                    'id'          : f'{totalPassedItems}',
+                    'date'        : capture_date,
+                    'position'    : str(equipPosition),
+                    'coord_x'     : str(click_x),
+                    'coord_y'     : str(click_y)
+                }
+            )            
             #input('stoppoint: after send line unlock url')
             """
             @app.get("/{process_gen}/{call_methods}")
@@ -1304,6 +1321,10 @@ for position in equipPositions:
             """
             
     ancientRuneScaned = False
+
+import json
+with open(RECENT_ENHANCED_LIST_PATH, mode='w', encoding='utf-8') as jfp:
+    json.dump(recent_enhanced_list_json, jfp, indent=4)
 
 money_when_enhance_completed = GetMoney().replace(".",",")
 money_when_enhance_completed_integer = int( money_when_enhance_completed.replace(",","") )
@@ -1333,6 +1354,6 @@ send_line_with_sticker(msg=message, token=lnToken, package_id=6325, sticker_id=1
 
 dest_port  = '8000'
 server_ip  = f'192.168.11.8:{dest_port}'
-message = f'Locking Operation List:\n{"/".join(["http:/", server_ip, "list"])}'
+message = f'Locking Operation Portal:\n{"/".join(["http:/", server_ip, "portal"])}'
 send_line(msg=message, token=lnToken)
 

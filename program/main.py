@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from email.mime import image
 from inspect import getmodule
 import pathlib, sys, datetime
@@ -85,6 +86,8 @@ from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
 from tools.GetUniqueCoordinates import GetUniqueCoordinates
 from tools.testGetUniqueCoordinates import testGetUniqueCoordinates
+from tools import ocr_remake
+
 clr.colorTheme()   # initialize
 
 
@@ -1239,88 +1242,163 @@ for position in equipPositions:
             capture_date = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
             summary_image_file_name = f"Gen-{currentGeneration}_" + f"Date-{capture_date}_" + f'Position-{equipPosition}_Rarerity-{targetRarerity}_' + f'EstStartMoney-{startMoney}' + '.png'
             
-            # 取得したキャプチャを読み込み、トリム、保存する。
-            remainingMoney_origin = Image.open(tmpf.name)
-            remainingMoney_origin.crop(runeSummaryCoords).save(RESULT_DIR.joinpath( summary_image_file_name )
-            )
-            
-            # Line Notify に画像を送信
-            # Line Notify にアンロック用のURLを送信
-            dest_port  = '8000'
-            server_ip  = f'192.168.11.8:{dest_port}'
-            click_x = str( coord[-1][0] )
-            click_y = str( coord[-1][1] )
-            queryparam = "&".join(
-                [
-                    f"?date={capture_date}",
-                    f"pos={str(equipPosition)}",
-                    f"x={click_x}",
-                    f"y={click_y}"
-                ]
-            )
-            
-            unlock_url = "/".join(
-                [
-                    'http:/',
-                    server_ip,
-                    str(PROCESS_GENERATION),
-                    'unlock' + queryparam
-                ]
-            )
-            "/".join(['http:/', server_ip, 'list'])
-            try:
-                cost = startMoneySingleRune - int( GetMoney().replace(".",",").replace(",","") )
-            except:
-                cost = 'unknown'
-            
-            message = "\n".join(
-                [
-                    f'\nest cost: {cost}',
-                    f'unlock url: {unlock_url}'
-                ]
-            )
-            
-            with open(BUILDUP_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
-                #fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}, {PROCESS_GENERATION}, {'\t'.join([str(v) for v in coord[0:4]])}), {targetRarerity}, {cost}, {summary_image_file_name}]")
-                fp.write("{date}\t{processgen}\t{position}\t{coords}\t{targetRarerity}\t{cost}\t{summary_image_file_name}\n".format(
-                        date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
-                        processgen = PROCESS_GENERATION,
-                        position = equipPosition,
-                        coords = '\t'.join( [str(v) for v in coord[0:4]] ),
-                        targetRarerity = targetRarerity,
-                        cost = cost,
-                        summary_image_file_name = summary_image_file_name
-                    )
-                )
-            send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
-            
-            
-            totalPassedItems += 1
+            def ConcurrentTasks():
+                # 取得したキャプチャを読み込み、トリム、保存する。
+                remainingMoney_origin = Image.open(tmpf.name)
+                remainingMoney_origin.crop(runeSummaryCoords).save(RESULT_DIR.joinpath( summary_image_file_name ) )
+                
+                abilities = ocr_remake.main( files=[ RESULT_DIR.joinpath(summary_image_file_name).as_posix() ] )
+                
+                def DictFix(dict):
+                    abilities = dict[0]
+                    #pprint.pprint(abilities)
 
-            recent_enhanced_list_json.append(
-                {
-                    'Process_gen' : str(currentGeneration),
-                    'file'        : summary_image_file_name,
-                    'lock'        : 'True',
-                    'id'          : f'{totalPassedItems}',
-                    'date'        : capture_date,
-                    'position'    : str(equipPosition),
-                    'coord_x'     : str(click_x),
-                    'coord_y'     : str(click_y)
-                }
-            )            
-            #input('stoppoint: after send line unlock url')
-            """
-            @app.get("/{process_gen}/{call_methods}")
-            async def ReadGen
-                call_methods: PathName_Methods,
-                process_gen: int, 
-                date: str,
-                x: int,
-                y: int,
-            """
+                    #pprint.pprint( [key for key in abilities] )
+                    basedict = {}
+                    for ability in abilities:
+                        key = list(ability.keys())[0]
+                        value = ability[key]
+
+                        basedict[key] = value
+                    
+                    return basedict
+                
+                # Line Notify に画像を送信
+                # Line Notify にアンロック用のURLを送信
+                dest_port  = '8000'
+                server_ip  = f'192.168.11.8:{dest_port}'
+                click_x = str( coord[-1][0] )
+                click_y = str( coord[-1][1] )
+                queryparam = "&".join(
+                    [
+                        f"?date={capture_date}",
+                        f"pos={str(equipPosition)}",
+                        f"x={click_x}",
+                        f"y={click_y}"
+                    ]
+                )
+                
+                unlock_url = "/".join(
+                    [
+                        'http:/',
+                        server_ip,
+                        str(PROCESS_GENERATION),
+                        'unlock' + queryparam
+                    ]
+                )
+                "/".join(['http:/', server_ip, 'list'])
+                try:
+                    cost = startMoneySingleRune - int( GetMoney().replace(".",",").replace(",","") )
+                except:
+                    cost = 'unknown'
+                
+                message = "\n".join(
+                    [
+                        f'\nest cost: {cost}',
+                        f'unlock url: {unlock_url}'
+                    ]
+                )
+                
+                #abilities = DictFix(abilities)
+                abilities = DictFix(abilities)
+                
+                def GetKeyValue(targetdict):
+                    masterRecord = []
+                    sortedMasterRecord = []
+                    keys = [k for k in list(targetdict.keys())]
+                    
+                    for key in keys:
+                        
+                        attrary = []
+                        valueary = []
+                        
+                        if key == 'file':
+                            continue
+                        
+                        for i, attr in enumerate( ['Name', 'Value'] ):
+                            
+                            if i % 2 == 0:
+                                attrary.append( targetdict[key]['Name'] )
+                            else:
+                                valueary.append( targetdict[key]['Value'] )
+                        
+                        masterRecord.append( {key: (attrary[0], valueary[0])} )
+                    
+                    for record in masterRecord:
+                        if list(record.keys())[0] == 'Main':
+                            sortedMasterRecord.append(record)
+                        elif list(record.keys())[0] == 'Sub':
+                            sortedMasterRecord.append(record)
+                        elif list(record.keys())[0] == '1':
+                            sortedMasterRecord.append(record)
+                        elif list(record.keys())[0] == '2':
+                            sortedMasterRecord.append(record)
+                        elif list(record.keys())[0] == '3':
+                            sortedMasterRecord.append(record)
+                        elif list(record.keys())[0] == '4':
+                            sortedMasterRecord.append(record)
+                        
+                    return sortedMasterRecord
+                def sortDelimTab(dictitems):
+                    tmparr = []
+                    
+                    for dictitem in dictitems:
+                        tmparr.append("\t".join([   "".join( [ v for v in list(dictitem.keys() )[0] ] ),
+                                                    "\t".join( [v for v in list( dictitem.values() )[0] ] ) ] ) )
+                    
+                    return "\t".join(tmparr)
+                
+                horizontalAbilityList = sortDelimTab(GetKeyValue(abilities))
+                
+                with open(BUILDUP_LOG_FILE_PATH, mode='a', encoding='utf-8') as fp:
+                    #fp.write(f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}, {PROCESS_GENERATION}, {'\t'.join([str(v) for v in coord[0:4]])}), {targetRarerity}, {cost}, {summary_image_file_name}]")
+                    fp.write("{date}\t{processgen}\t{position}\t{coords}\t{targetRarerity}\t{cost}\t{abilities}\t{summary_image_file_name}\n".format(
+                            date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
+                            processgen = PROCESS_GENERATION,
+                            position = equipPosition,
+                            coords = '\t'.join( [str(v) for v in coord[0:4]] ),
+                            targetRarerity = targetRarerity,
+                            cost = cost,
+                            abilities = horizontalAbilityList,
+                            summary_image_file_name = summary_image_file_name
+                        )
+                    )
+                send_line_with_image(msg=message, token=lnToken, image_file=RESULT_DIR.joinpath( summary_image_file_name ) )
+                
+                global totalPassedItems
+                totalPassedItems += 1
+                
+                recent_enhanced_list_json.append(
+                    {
+                        'Process_gen' : str(currentGeneration),
+                        'file'        : summary_image_file_name,
+                        'lock'        : 'True',
+                        'id'          : f'{totalPassedItems}',
+                        'date'        : capture_date,
+                        'position'    : str(equipPosition),
+                        'coord_x'     : str(click_x),
+                        'coord_y'     : str(click_y),
+                        'abilities'   : abilities
+                    }
+                )
+                
+                #input('stoppoint: after send line unlock url')
+                """
+                @app.get("/{process_gen}/{call_methods}")
+                async def ReadGen
+                    call_methods: PathName_Methods,
+                    process_gen: int, 
+                    date: str,
+                    x: int,
+                    y: int,
+                """
+                return abilities
+            
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                retval = executor.submit(ConcurrentTasks())
             
     ancientRuneScaned = False
+
 
 import json
 with open(RECENT_ENHANCED_LIST_PATH, mode='w', encoding='utf-8') as jfp:

@@ -77,7 +77,7 @@ tools = pyocr.get_available_tools()
 tool  = tools[0]
 
 view = True
-MASTER_RECORD = []
+MASTER_RECORD = {}
 def main(files=files):
     global TEMPLATE_SYMBOLS_DIR
     
@@ -399,24 +399,20 @@ def main(files=files):
                 """
         print(fg.GREEN, AbilityContainerFp.name, fg.END)
         def RecordCreate():
-            returnRecord = []
+            returnRecord = {}
             for AbilitiyPoint in list(Abilities.keys()):
-                singleAbilityParam = {
-                    AbilitiyPoint: {
+                returnRecord[AbilityPoint] = {
                         'Name': Abilities[AbilitiyPoint]['Param']['Name'],
                         'Value': Abilities[AbilitiyPoint]['Param']['Value'],
                     }
-                }
-                
-                returnRecord.append(singleAbilityParam)
                 
                 print(Abilities[AbilitiyPoint]['Param']['Name'],' +', Abilities[AbilitiyPoint]['Param']['Value'], sep="")
             
-            returnRecord.append({'file': file})
+            returnRecord['file'] = file
             
             return returnRecord
         
-        MASTER_RECORD.append(RecordCreate())
+        MASTER_RECORD.update(RecordCreate())
     [ pathlib.Path(v).unlink(missing_ok=True) for v in WORKING_PICTURE_SAVE_DIR.glob('./*') if re.search(r'.+(before.png|ability.png)', v.as_posix())]
     return MASTER_RECORD
 

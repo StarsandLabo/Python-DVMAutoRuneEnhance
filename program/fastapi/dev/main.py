@@ -1,13 +1,12 @@
-from csv import DictReader
 import pathlib, sys
 from subprocess import call
-from enum import Enum
+from enum import Enum, auto
 import re, datetime, pprint, os, shutil
 import tempfile
-from blinker import receiver_connected
+from types import NoneType
+from xml.dom.xmlbuilder import DocumentLS
 
-
-
+from numpy import cov
 
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
@@ -62,6 +61,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi import Form
 from typing import Optional
+from pydantic import BaseModel, Field
 #os.chdir(PROJECT_DIR.joinpath('program', 'fastapi').as_posix())
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
@@ -74,6 +74,24 @@ class PathName_Methods(str, Enum):
     unlock = 'unlock'
     lock   = 'lock'
     invert = 'invert'
+
+class StrEnum(Enum):
+    @staticmethod
+    def _generate_next_value_(name: str, start: int, count: int) -> str:
+        return name
+
+class LockingOperations(StrEnum):
+    unlock = 'unlock'
+    lock   = 'lock'
+
+class PostReceivedFromUser(BaseModel):
+    Process_gen : str# = Field("",       title="Execution generation")
+    call_method : str# = Field("unlock", title="Type of Locking operation(unlock/lock)")
+    coord_x     : str# = Field("",       title="target x axis")
+    coord_y     : str# = Field("",       title="target y axis")
+    date        : str# = Field("",       title="datetime")
+    file        : str# = Field("",       title="filename")
+    position    : str# = Field("",       title="Equip position")
 
 app = FastAPI()
 app.mount('/result', StaticFiles(directory="/home/starsand/DVM-AutoRuneEnhance/result"), name='result')
@@ -93,9 +111,157 @@ def CheckJSON():
 
 CheckJSON()
 
+def GetBaseDict():
+    try:
+        with open(RECENT_ENHANCED_LIST_PATH, mode='r', encoding='utf-8') as jfp:
+            basedict = json.load(jfp)
+    except:
+        basedict = []
+        pass
+
+    # basedictのfileを非再帰的に見て、存在しなければ其のインデックスを削除する。
+    
+    return [ v for v in basedict if RESULT_DIR.joinpath(v['file']).exists() ]
+
 # 画像退避先の確認と作成。
 if not RESULT_DIR.joinpath('AfterLockingOperation', 'divert', 'images', 'dev').exists():
     RESULT_DIR.joinpath('AfterLockingOperation', 'divert', 'images', 'dev').mkdir(exist_ok=False, parents=True)
+
+def GetCurrentProcessGen():
+    try:
+        # 実行世代をファイルから取得
+        with open(PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'r') as fp:
+            saved_gen = fp.read()
+    except:
+        print(f'[ {sys._getframe().f_code.co_name} ]', fg.DARKRED, 'Operaton Failed', fg.END)
+        return
+    
+    return saved_gen
+
+def LogWrite(dictionary, logfilepath='./testlogs.log'):
+    # 受け取ったJsonデータをログファイルに追記
+    try:
+        with open(logfilepath, 'a') as fp:
+            fp.write(", ".join(
+                [
+                                dictionary['call_method'],
+                                dictionary['Process_gen'],
+                                dictionary['date'],
+                                dictionary['file'],
+                                dictionary['position'],
+                                dictionary['coord_x'],
+                                dictionary['coord_y']
+                ]
+                            )
+                    + "\n"
+                    )
+    except:
+        print(f'[ {sys._getframe().f_code.co_name} ]', fg.DARKRED, 'Operaton Failed', fg.END)
+    
+    return
+
+def JsonWrite(content=results, path=JSON_FILE_PATH.as_posix() ):
+    try:
+        with open(path, 'w') as jf:
+            json.dump(content, jf, indent=4)
+            jf.close()
+    except:
+        print(f'[ {sys._getframe().f_code.co_name} ]', fg.DARKRED, 'Operaton Failed', fg.END)
+        return
+
+def ValidateProcessGenAndFilepath(dictionary, Process_gen):
+    if re.fullmatch(r'\d{14}', dictionary['Process_gen'] ):
+        # ProcessGenerationがクエリパラメータと現在保存されている値で一致するか
+        if not int(dictionary['Process_gen']) == int(Process_gen):
+            errormessage = 'process_gen did not match received query.'
+            print(f'[ {sys._getframe().f_code.co_name} ]', errormessage)
+            return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'received': dictionary['Process_gen'], 'message': errormessage}
+            
+        # globの戻りは1つの値か(時刻を利用しているので基本一つ)
+        elif not len( list(RESULT_DIR.glob(f"./*{dictionary['Process_gen']}*{dictionary['date']}*") ) ) == 1:
+            errormessage = 'Found items over quantity limit.'
+            print(f'[ {sys._getframe().f_code.co_name} ]', errormessage)
+            return {
+                'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}',
+                'message': errormessage
+            }
+        
+        else:
+            return True
+
+def LocalFileSearch(gen, date):
+    targetpath = str(list(RESULT_DIR.glob(f"./*{gen}*{date}*"))[0].as_posix().split(f"{os.sep}")[-1])
+    return targetpath
+
+def UpdateResults(dictionary, results=results):
+    print(f'[ {sys._getframe().f_code.co_name} ]',results)
+    # 検証がOKだった時、アイテムを格納する。
+    
+    # 初回resultsが何もない時は、resultsに辞書を追加し、Jsonファイルへ書き込む
+    # resultsの配列が1つ以上の時、同じファイル名が含まれているか確認し、含まれていれば何もしない。
+    try:
+        print('try statement', results,"\n")
+    except:
+        print(f'[ {sys._getframe().f_code.co_name} ]', fg.DARKRED, 'Operaton Failed', fg.END)
+        return
+    
+    #print( LocalFileSearch(gen=dictionary['Process_gen'], date=dictionary['date']) )
+    if results == None or len(results) == 0:
+        results = []
+        results.append(
+            {
+                'Process_gen'   : dictionary['Process_gen'],
+                'call_method'   : dictionary['call_method'],
+                'date'          : dictionary['date'],
+                'file'          : LocalFileSearch(gen=dictionary['Process_gen'], date=dictionary['date']) ,
+                'position'      : int(dictionary['position']) , 
+                'coord_x'       : int(dictionary['coord_x']),
+                'coord_y'       : int(dictionary['coord_y']),
+                'id'            : "0"
+            }
+        )
+        
+        JsonWrite(content=results)
+        print(f'[ {bg.DARKCYAN}{sys._getframe().f_code.co_name}{bg.END} ] True statement: items', len(results),"\n")
+        return results
+            
+    else:
+        # バリデーション用に一時的にオブジェクトを作成
+        CheckJSON()
+        
+        #print(f'[ {sys._getframe().f_code.co_name} ] Json file path: ', JSON_FILE_PATH.as_posix() )
+        with open(JSON_FILE_PATH.as_posix(), 'r') as jfp:
+            documents = jfp.read()
+        
+        item = LocalFileSearch(gen=dictionary['Process_gen'], date=dictionary['date'])
+        print(item, type(item))
+        print('documents',documents)
+        # 既に同じルーンが入っている時は、配列から取り除く。
+        if item in documents:
+            index = [ i for i, v in enumerate(results) if v['file'] == item ]
+            results.pop(index[0])
+            print(bg.RED, index, bg.END)
+            pprint.pprint(results)
+            print(f'[ {bg.DARKCYAN}{sys._getframe().f_code.co_name}{bg.END} ] else > True statement: items', len(results),"\n")
+            JsonWrite(content=results)
+        else:
+            results.append(
+                {
+                    'Process_gen'   : dictionary['Process_gen'],
+                    'call_method'   : dictionary['call_method'],
+                    'date'          : dictionary['date'],
+                    'file'          : LocalFileSearch(gen=dictionary['Process_gen'], date=dictionary['date']),
+                    'position'      : int(dictionary['position']) , 
+                    'coord_x'       : int(dictionary['coord_x']),
+                    'coord_y'       : int(dictionary['coord_y']),
+                    'id'            : "0"
+                }
+            )
+            
+            JsonWrite(content=results)
+            print(f'[ {bg.DARKMAGENTA}{sys._getframe().f_code.co_name}{bg.END} ] else > else statement: items', len(results),"\n")
+            return results
+
 
 def EquipPositionClickFromImage(number, confidence=0.9):
     print(f'[ {sys._getframe().f_code.co_name} ] Start {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
@@ -146,6 +312,7 @@ def LockMarkOperation(mode, filepath):
         print(f'[ {sys._getframe().f_code.co_name} ] Locking Operation: ', 'False')
         pass
     #return print(f'[ {sys._getframe().f_code.co_name} ] end {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
+
 
 @app.get("/{process_gen}/{call_methods}")
 async def ReadGen(
@@ -248,15 +415,36 @@ async def ReadGen(
         
         return RedirectResponse('http://192.168.11.8:8000/portal')
 
-@app.post("/{process_gen}")
-async def ReadPostedItem(params: Optional[str] = Form(None)):
-    receivcedParameters = params.split(',')
+@app.post('/post')
+async def posttest(payload: PostReceivedFromUser):
+    Converted = {}
+    print(fg.GREEN,'Received Payload',fg.END,datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), sep="")
+    print(type(payload), [f'{i}: {v}' for i, v in enumerate(payload)])
+    for record in payload:
+        Converted[record[0]] = record[1]
+    print(f'{fg.RED}\ndicted\n{fg.END}', Converted)
     
-    try:
-        master
-    except UnboundLocalError:
-        master = []
+    SavedCurrentProcessGeneration = GetCurrentProcessGen()
+    LogWrite(Converted)
+    if ValidateProcessGenAndFilepath(Converted, SavedCurrentProcessGeneration) == True:
+        print('[ /post ] ', 'true statement')
+        global results
+        results = UpdateResults(dictionary=Converted, results=results)
+    else:
+        print('[ /post < Validation Process_gen and Saved image file path > ] ', "Converted['Process_gen']:", Converted['Process_gen'], "SavedCurrentProcessGeneration:", SavedCurrentProcessGeneration)
+    
+    return ['post ok', payload]
 
+@app.post("/{process_gen}")
+async def ReadPostedItem(request: Request, params: Optional[str] = Form(None)):
+    receivcedParameters = params.split(',')
+
+    try:
+        RECEIVED_MASTER
+    except NameError:
+        RECEIVED_MASTER = []
+
+    
     # indexを2で割った余りが0の時はキー、1の時は値となるリストを作成する。
     # 辞書を2つに分けて、Zipで結合売る。
     keys = []
@@ -264,39 +452,45 @@ async def ReadPostedItem(params: Optional[str] = Form(None)):
     for i, item in enumerate(receivcedParameters):
         keys.append(item) if i % 2 == 0 else values.append(item)
     zipped = zip(keys, values)
-    master.append(dict(zipped))
+    RECEIVED_MASTER.append(dict(zipped))
 
+    def LocalFileSearch(gen=RECEIVED_MASTER[0]['Process_gen'], date=RECEIVED_MASTER[0]['date']):
+        targetpath = str(list(RESULT_DIR.glob(f"./*{gen}*{date}*"))[0].as_posix().split(f"{os.sep}")[-1])
+        return targetpath
+    
     #received = json.JSONEncoder.encode(params)
-    print(fg.DARKCYAN,'received params', fg.END, "\n", master)
+    print(fg.DARKCYAN,'received params', fg.END, "\n", RECEIVED_MASTER)
     
     global results
     
     # 実行世代をファイルから取得
     with open(PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'r') as fp:
         saved_gen = fp.read()
-        
+    
+    # 受け取ったJsonデータをログファイルに書き込み
     with open('./testlogs.log', 'a') as fp:
         fp.write(", ".join(
             [
-                            master[0]['call_method'],
-                            master[0]['Process_gen'],
-                            master[0]['date'],
-                            master[0]['coord_x'],
-                            master[0]['coord_y']
+                            RECEIVED_MASTER[0]['call_method'],
+                            RECEIVED_MASTER[0]['Process_gen'],
+                            RECEIVED_MASTER[0]['date'],
+                            RECEIVED_MASTER[0]['file'],
+                            RECEIVED_MASTER[0]['position'],
+                            RECEIVED_MASTER[0]['coord_x'],
+                            RECEIVED_MASTER[0]['coord_y']
             ]
                         )
-                 + "\n"
+                + "\n"
                 )
     
-    return master
-    
-    if re.fullmatch(r'\d{14}', str(process_gen) ):
+    if re.fullmatch(r'\d{14}', RECEIVED_MASTER[0]['Process_gen'] ):
+        print(RECEIVED_MASTER[0]['Process_gen'], saved_gen)
         # ProcessGenerationがクエリパラメータと現在保存されている値で一致するか
-        if not process_gen == int(saved_gen):
-            return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'received': process_gen, 'message': 'process_gen did not match received query.'}
+        if not int(RECEIVED_MASTER[0]['Process_gen']) == int(saved_gen):
+            return { 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}', 'received': RECEIVED_MASTER[0]['Process_gen'], 'message': 'process_gen did not match received query.'}
             
         # globの戻りは1つの値か(時刻を利用しているので基本一つ)
-        elif not len( list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*')) ) == 1:
+        elif not len( list(RESULT_DIR.glob(f"./*{RECEIVED_MASTER[0]['Process_gen']}*{RECEIVED_MASTER[0]['date']}*") ) ) == 1:
             return {
                 'time': f'{datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}',
                 'message': 'Found items over quantity limit.'
@@ -312,19 +506,19 @@ async def ReadPostedItem(params: Optional[str] = Form(None)):
         except:
             pass
         
-        print(list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix().split(f"{os.sep}")[-1] )
+        print( LocalFileSearch() )
         if results == None or len(results) == 0:
             results = []
             results.append(
                 {
-                    'Process_gen' : str(process_gen),
-                    'call_method' : call_methods.value,
-                    'date' : date,
-                    'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix().split(f"{os.sep}")[-1] ,
-                    'position' : pos , 
-                    'coord_x': x,
-                    'coord_y': y,
-                    'id' : "0"
+                    'Process_gen'   : RECEIVED_MASTER[0]['Process_gen'],
+                    'call_method'   : RECEIVED_MASTER[0]['call_method'],
+                    'date'          : RECEIVED_MASTER[0]['date'],
+                    'file'          : LocalFileSearch() ,
+                    'position'      : int(RECEIVED_MASTER[0]['position']) , 
+                    'coord_x'       : int(RECEIVED_MASTER[0]['coord_x']),
+                    'coord_y'       : int(RECEIVED_MASTER[0]['coord_y']),
+                    'id'            : "0"
                 }
             )
             
@@ -340,11 +534,11 @@ async def ReadPostedItem(params: Optional[str] = Form(None)):
             print(JSON_FILE_PATH.as_posix())
             with open(JSON_FILE_PATH.as_posix(), 'r') as jfp:
                 documents = jfp.read()
-                
+            
+            item = LocalFileSearch()
             # 既に同じルーンが入っている時は、配列から取り除く。
-            if list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix().split(f"{os.sep}")[-1] in documents:
-                targetFileName = list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix().split(f"{os.sep}")[-1]
-                index = [ i for i, v in enumerate(results) if v['file'] == targetFileName ]
+            if item in documents:
+                index = [ i for i, v in enumerate(results) if v['file'] == item ]
                 results.pop(index[0])
                 with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
                     json.dump(results, jf, indent=4)
@@ -352,14 +546,14 @@ async def ReadPostedItem(params: Optional[str] = Form(None)):
             else:
                 results.append(
                     {
-                        'Process_gen' : str(process_gen),
-                        'call_method' : call_methods.value,
-                        'date' : date,
-                        'file' : list(RESULT_DIR.glob(f'./*{str(process_gen)}*{date}*'))[0].as_posix().split(f"{os.sep}")[-1] ,
-                        'position' : pos , 
-                        'coord_x': x,
-                        'coord_y': y,
-                        'id' : "0"
+                        'Process_gen'   : RECEIVED_MASTER[0]['Process_gen'],
+                        'call_method'   : RECEIVED_MASTER[0]['call_method'],
+                        'date'          : RECEIVED_MASTER[0]['date'],
+                        'file'          : list(RESULT_DIR.glob(f"./*{RECEIVED_MASTER[0]['Process_gen']}*{RECEIVED_MASTER[0]['date']}*"))[0].as_posix().split(f"{os.sep}")[-1] ,
+                        'position'      : int(RECEIVED_MASTER[0]['position']) , 
+                        'coord_x'       : int(RECEIVED_MASTER[0]['coord_x']),
+                        'coord_y'       : int(RECEIVED_MASTER[0]['coord_y']),
+                        'id'            : "0"
                     }
                 )
                 
@@ -369,8 +563,24 @@ async def ReadPostedItem(params: Optional[str] = Form(None)):
             
         
         pprint.pprint(results)
-        
-        return RedirectResponse('http://192.168.11.8:8000/portal')
+    
+    basedicts = GetBaseDict()
+    abilities = None
+    
+    try:
+        basedicts[0]['abilities']['file']
+        basedicts[0]['abilities'].pop('file')
+        abilities = basedicts[0]['abilities']
+    except:
+        pass
+    return templates.TemplateResponse('prod/index.html', {
+        "request": request,
+        "basedicts"  : basedicts,
+        "abilities"  : abilities
+        }
+    )
+
+    #return RedirectResponse('http://192.168.11.8:8000/portal')
 
 
 @app.get("/exec")
@@ -399,6 +609,8 @@ def LockAccess(request: Request):
         return 'target not found 2.'
     
     for record in results:
+        
+
         
         with open(PROCESS_GENERATION_FILE_DIR.joinpath(PROCESS_GENERATION_FILE_NAME).as_posix(), 'r') as fp:
             saved_gen = int( fp.read() )
@@ -449,7 +661,7 @@ def LockAccess(request: Request):
     with open(JSON_FILE_PATH.as_posix(), 'w') as jf:
         jf.write("".join(results))
         jf.close()
-    return templates.TemplateResponse('dev/index.html', {
+    return templates.TemplateResponse('prod/index.html', {
         "request": request
         }
     )
@@ -527,6 +739,19 @@ def viewtemplate(request: Request):
         basedict = []
         pass
     
+    try:
+        basedict[0]['abilities']
+    except:
+        pass
+    
+    # tableを作るためにキーを削除する
+    try:
+        basedict[0]['abilities']['file']
+        basedict[0]['abilities'].pop('file')
+        abilities = basedict[0]['abilities']
+    except:
+        pass
+    
     """
     if type(results) == None or len(results) == 0:
         return templates.TemplateResponse('prod/actionlist.html', {
@@ -541,13 +766,15 @@ def viewtemplate(request: Request):
     return templates.TemplateResponse('prod/index.html', {
         "request": request,
         "basedicts"  : basedict,
+        "abilities" : abilities
         }
     )
+
 
 @app.get("/actionlist")
 def actionlist(request: Request):
     global results
-    if type(results) == None or len(results) == 0:
+    if type(results) == NoneType or None or len(results) == 0:
         return templates.TemplateResponse('prod/index.html', {
         "request": request,
         "dicts"  : results
@@ -558,3 +785,4 @@ def actionlist(request: Request):
         "dicts"  : results
         }
     )
+

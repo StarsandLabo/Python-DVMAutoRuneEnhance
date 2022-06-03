@@ -30,7 +30,6 @@ from tools.clickcondition import ClickCondition as clcd
 from tools.ScreenCapture_pillow import ScreenCapture
 from tools.GetUniqueCoordinates import GetUniqueCoordinates
 from tools.RuneSummaryTemplates import Templates
-from RuneSummary import abilitynameCheck, optimize
 from tools.TerminalColors import TerminalColors as tc
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import threading
@@ -99,7 +98,13 @@ def main(files=files):
         with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix=f'_crop_ability.png', delete=False) as AbilityContainerFp:
             def filesave():
                 image = Image.open(RESULT_DIR.joinpath(file).as_posix())
-                image.crop(box).save(AbilityContainerFp.name, quality=100)
+                try:
+                    image.crop(box).save(AbilityContainerFp.name, quality=100)
+                except:
+                    tmpimage = cv2.imread(RESULT_DIR.joinpath(file).as_posix())
+                    cv2.imshow('test', tmpimage)
+                    cv2.waitKey(0)
+                    cv2.destroyAllWindows()
             
             with ThreadPoolExecutor(max_workers=100) as executor:
                 executor.submit( filesave() )
@@ -130,9 +135,16 @@ def main(files=files):
                         thickness=-1,
                         color=(0, 0, 0)
                     )
+                    
+                    
                     print(f'[ {fg.DARKCYAN}{sys._getframe().f_code.co_name}{fg.END} ]',f'OpenCV did draw rectangle {filling_area}')
                     cv2.imwrite(AbilityContainerFp.name, baseimage)
-        
+                    
+                # testcode preview
+                #?cv2.imshow("baseimage_preprocess", baseimage)
+                #?cv2.waitKey(0)
+                #?cv2.destroyAllWindows()
+                
         with ProcessPoolExecutor() as executor:
             executor.submit( PreprocessFillMax() )
         
@@ -144,9 +156,9 @@ def main(files=files):
             targetfile = cv2.imread(AbilityContainerFp.name, 0)
             ret, binaried = cv2.threshold(targetfile, binaryThreshold, 255, cv2.THRESH_BINARY_INV)
             
-            #? cv2.imshow("", mat=binaried)
-            #? cv2.waitKey(0)
-            #? cv2.destroyAllWindows()
+            #?cv2.imshow("", mat=binaried)
+            #?cv2.waitKey(0)
+            #?cv2.destroyAllWindows()
             
             cv2.imwrite(binariedFp.name, img=binaried)
             
@@ -159,10 +171,10 @@ def main(files=files):
             #?print (d.content)
             #?print (d.position)
             cv2.rectangle(out, d.position[0], d.position[1], (0, 0, 255), 1)
-        
-        #? cv2.imshow('image', out)
-        #? cv2.waitKey(0)
-        #? cv2.destroyAllWindows()
+    
+        #?cv2.imshow('image', out)
+        #?cv2.waitKey(0)
+        #?cv2.destroyAllWindows()
         #+ メインオプションを保存する
         
         Abilities['Main'] = { 'position': res[0].position }
@@ -334,7 +346,12 @@ def main(files=files):
                     color=(0, 0, 0)
                 )
                 cv2.imwrite(filename=Abilities[keyName]['filled_filename'], img=filled_image)
-                print(f'[ {fg.DARKGREEN}Filled{fg.END} ]',f'{fill_key_name}')
+                
+                #?cv2.imshow("",filled_image)
+                #?cv2.waitKey(0)
+                #?cv2.destroyAllWindows()
+                
+                #print(f'[ {fg.DARKGREEN}Filled{fg.END} ]',f'{fill_key_name}')
                 #cv2.imwrite(Abilities[keyName]['filled_filename'], filled_image)
         
         for keyName in keyNames:
@@ -350,20 +367,20 @@ def main(files=files):
             if not pathlib.Path(Abilities[keyName]['filled_filename']).exists():
                 shutil.copy(Abilities[keyName]['filename'], Abilities[keyName]['filled_filename'])
             
-            print(f'[ {bg.DARKMAGENTA}Current Proccesing{bg.END} ]',Abilities[keyName]['filled_filename'])
+            #print(f'[ {bg.DARKMAGENTA}Current Proccesing{bg.END} ]',Abilities[keyName]['filled_filename'])
             
             for fill_key_name in fill_key_names:
                 
                 with ThreadPoolExecutor(max_workers=100) as executor:
                     executor.submit( DrawRectangle() )
-            #? cv2.imshow("",filled_image)
-            #? cv2.waitKey(0)
-            #? cv2.destroyAllWindows()
+            #?cv2.imshow("",filled_image)
+            #?cv2.waitKey(0)
+            #?cv2.destroyAllWindows()
         
         #-   cropped_after.pngに文字認識を行う。ここは並列化可能なはず
-        pprint.pprint(Abilities)
-        basicformat = re.compile(r'[^0-9]+([0-9,\.,\,]+)')
-        basicformat2 = re.compile(r'([^\s]+)')
+        #pprint.pprint(Abilities)
+        basicformat = re.compile( r'([0-9]+)|([^\s,+,0-9,%]+)' )
+        basicformat2 = re.compile(r'([^\s,+]+)')
             
         for keyName in keyNames:
             
@@ -372,17 +389,33 @@ def main(files=files):
                 targetfile = cv2.imread(Abilities[keyName]['filled_filename'], 0)
                 ret, binaried = cv2.threshold(targetfile, binaryThreshold, 255, cv2.THRESH_BINARY_INV)
                 
-                #? cv2.imshow(keyName, mat=binaried)
-                #? cv2.waitKey(0)
-                #? cv2.destroyAllWindows()
+                #?cv2.imshow(keyName, mat=binaried)
+                #?cv2.waitKey(0)
+                #?cv2.destroyAllWindows()
                 
                 cv2.imwrite(binariedFp.name, img=binaried)
                 
                 # LineBox
                 res = tool.image_to_string( Image.open(binariedFp.name), lang='jpn', builder=pyocr.builders.TextBuilder(tesseract_layout=7) )
-                
-            Abilities[keyName]['Param']['Name'] = (basicformat2.findall(res)[0])
-            Abilities[keyName]['Param']['Value'] = "".join( [basicformat2.findall(res)[-1].replace(".",","),'%' if Abilities[keyName]['fill']['percent']['isEnable'] == True else "" ])
+            """
+            print(f'[{bg.DARKYELLOW}{fg.BLACK}ocr_remake: var "res" check 1{bg.END}]', res)
+            print(f'[{bg.DARKCYAN}{fg.BLACK}ocr_remake: var "res" check 2{bg.END}]'); pprint.pprint(Abilities)
+            print(f'[{bg.DARKMAGENTA}{fg.BLACK}ocr_remake: var "res" check 3{bg.END}]'); pprint.pprint(Abilities[keyName])
+            print(f'[{bg.DARKGREEN}{fg.BLACK}ocr_remake: var "res" check 4{bg.END}]'); pprint.pprint(Abilities[keyName]['Param'])
+            """
+            # 空白の時は unknownにする。
+            try:
+                Abilities[keyName]['Param']['Name'] = (basicformat.findall(res)[0][1])
+                #Abilities[keyName]['Param']['Name'] = (basicformat2.findall(res)[0]) #! basicformat無印と2の違い
+                Abilities[keyName]['Param']['Value'] = "".join( [basicformat.findall(res)[-1][0].replace(".","").replace(",",""),'%' if Abilities[keyName]['fill']['percent']['isEnable'] == True else "" ])
+                #Abilities[keyName]['Param']['Value'] = "".join( [basicformat2.findall(res)[-1].replace(".","").replace(",",""),'%' if Abilities[keyName]['fill']['percent']['isEnable'] == True else "" ]) #! basicformat無印と2の違い
+            except:
+                #+ 今はエラーで流しちゃうけど、多分この画像に対してもう一度スキャンをかけたりすれば通る可能性はある。
+                print(f'[{bg.DARKMAGENTA}{fg.RED}ocr_remake: values check Failed{bg.END}]',Abilities[keyName]['Param'])
+                Abilities[keyName]['Param']['Name'] = 'Unknown'
+                Abilities[keyName]['Param']['Value'] = 'Unknown'
+            
+            #print(f'[{bg.DARKYELLOW}{fg.BLACK}ocr_remake: values check{bg.END}]',Abilities[keyName]['Param']['Name'], Abilities[keyName]['Param']['Value'])
             
             # 名前と値が同じだった時はunknownとする。
             if Abilities[keyName]['Param']['Name'] == Abilities[keyName]['Param']['Value']:

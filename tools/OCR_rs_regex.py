@@ -14,7 +14,13 @@ class Regexes():
     att_def_true = re.compile( r'[防|攻][御|撃]力' )
     att_def_top = re.compile( r'[攻防][^際][^速度御,\']+') #- OK
     att_def_center = re.compile( r'[^反][御撃][^速][^度,\']*' ) #- OK
-    crit_d       = re.compile( r'クリティ(カ|力)ル[^率,\']+')
+    crit_d       = re.compile( r'クリティ[カ力]ル[^率,\']+')
+    crit_d_indivisual = re.compile(r'(クリテ|ウリティ)(?=\')')
+    crit_d_indivisual_type2 = re.compile(r'(クリテ|ウリティ)[^\']*')
+    # 'クリテ'or'ウリティ'の形であってほしい。
+    # クリティカルダメージ(クリティカル率)は除外したい。
+    # クリテの時'ィカルダメージ'が続かないものをマッチ条件にしたい。?!多分これ
+    
     
     otherObject = {
         '回避': re.compile( r'(回.)|(.避)' ),
@@ -122,25 +128,63 @@ def Substitute_att_def(word, silent=False):
         
     return ret
 
+# クリテやウリティとクリティカルダメージが一緒にいると対応できないので修正する。
 def Substitute_crit_d(word, silent=False):
     rx = Regexes()
     ret = word
     
     if rx.crit_d.search(word):
         if not rx.crit_d.search(word).group() == 'クリティカルダメージ':
-            print( Message.Message(result=rx.crit_d.sub('クリティカルダメージ', word), input_origin=word, emphasis=(rx.crit_d, 'クリティカルダメージ'), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
+            print( Message.Message(result=rx.crit_d.sub('クリティカルダメージ', word), input_origin=word, emphasis=(rx.crit_d, 'クリティカルダメージ'), parentFuncName=sys._getframe().f_code.co_name + ": 基本" ) ) if silent == False else True
             ret = rx.crit_d.sub('クリティカルダメージ', word)
         else:
             print( Message.Message(result=f'{word} ({fg.DARKGREEN}Exception Word or No Substituted{fg.END})', input_origin=word, parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
             ret = word
-    elif word in IndividualSubstites().crit_d:
-        print( Message.Message(result=re.sub(r'(クリテ)|(ウリティ)', 'クリティカルダメージ', word), input_origin=word, emphasis=(re.compile(r'(クリテ)|(ウリティ)'), 'クリティカルダメージ'),parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
-        ret = re.sub(r'(クリテ)|(ウリティ)', 'クリティカルダメージ', word)
     else:
-        print( Message.Message(result=f'{word} ({fg.DARKGREEN}Exception Word or No Substituted{fg.END})', input_origin=word, parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
         ret = word
     
+    #input()
+    #  そもそもここで認識されていない。
+    # 再起処理だとクリティカルダメージがクリテを内包しているのでループが切れなくなる。
+    # 先読みか後読みの正規表現を定義してあげる。
+    # 複数存在することはあり得るので、まずfinditerかfindallでクリテorウリティと合致した時該当spanの内容を削除してインサートする。
+    #+ finditerでとってきた領域だけ切り取ってそれがクリテorウリティとイコールになるかを比べる。
+    #- ifが必要
+    if rx.crit_d_indivisual.findall(ret):
+        for tgtword in IndividualSubstites.crit_d:
+            #print( [ v.span() for v in rx.crit_d_indivisual_type2.finditer(ret) if v.group() == tgtword ] )
+            try:
+                spans = [ v.span() for v in rx.crit_d_indivisual_type2.finditer(ret) if v.group() == tgtword ]
+                tmpline = list(ret)
+                tmpline[spans[0][0]:spans[0][1] + 1] = []
+                tmpline.insert(spans[0][0], 'クリティカルダメージ')
+                print( Message.Message(result="".join(tmpline), input_origin=ret, emphasis=(rx.crit_d_indivisual, tgtword), parentFuncName=sys._getframe().f_code.co_name + ": 個別対応" ) ) if silent == False else True
+                ret = "".join(tmpline)
+                
+                input()
+            except IndexError:
+                pass
+    
+    """
+    for condition in IndividualSubstites.crit_d:
+        def IndividualCheck(arg,line):
+            if arg in line:
+                print( Message.Message(result=rx.crit_d_indivisual.sub('クリティカルダメージ', line), input_origin=line, emphasis=(rx.crit_d_indivisual, 'クリティカルダメージ'),parentFuncName=sys._getframe().f_code.co_name + ": 個別対応" ) ) if silent == False else True
+                ret = rx.crit_d_indivisual.sub('クリティカルダメージ', line)
+                IndividualCheck(arg=condition, line=ret)
+            else:
+                print( Message.Message(result=f'{word} ({fg.DARKGREEN}Exception Word or No Substituted{fg.END})', input_origin=word, parentFuncName=sys._getframe().f_code.co_name + ": 個別対応" ) ) if silent == False else True
+                ret = word
+            return ret
+        
+        trueret = IndividualCheck(arg=condition, line=ret)
+    """
+    
     return ret
+
+# test
+# tgtwordに一致するspanをとってきて、その箇所を置換する。
+    
 
 
 #入力文字列はrx.otherObjectの条件に合致するかどうか調べる。
@@ -219,7 +263,12 @@ if __name__ == '__main__':
     with open(SUBSTITUTED_RESULT_FILE_PATH, mode='w') as fp:
         fp.write(adjusted)
     
-    print(bg.ORANGE,'Result',bg.END, SUBSTITUTED_RESULT_FILE_PATH )
+    print(bg.ORANGE,'Result',bg.END, 'cat', SUBSTITUTED_RESULT_FILE_PATH )
+    
+    #? test
+    targetword = "'クリテ'"
+    import subprocess
+    subprocess.Popen([f'grep -i "{targetword}" {SUBSTITUTED_RESULT_FILE_PATH}'],shell=True)
     #for word in TestWords.words_att_def:
     #    Substitute_att_def(word, silent=False)
     #    Substitute_crit_d(word, silent=False)

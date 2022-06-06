@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from doctest import master
 from fileinput import filename
 import pathlib, sys
@@ -32,7 +33,8 @@ import pyscreeze as pysc
 import pyocr
 import pandas as pd
 import pprint
-
+import json
+import ast
 #* My tools
 from tools import colortheme as clr
 from tools import reduce_overdetected as rod
@@ -42,6 +44,7 @@ from tools.GetUniqueCoordinates import GetUniqueCoordinates
 from tools.RuneSummaryTemplates import Templates
 from tools import ocr_remake
 from tools import RebuildDictionary
+from tools import OCR_rs_regex
 clr.colorTheme()   # initialize
 
 class regexes:
@@ -340,30 +343,60 @@ if __name__ == '__main__':
 
     get_template_size.close()
 
-    #- 装着箇所
-    testmode_20220603 = False
+    
+    templatePaths =[
+        template.pos1s['template'],
+        template.pos2s['template'],
+        template.pos3s['template'],
+        template.pos4s['template'],
+        template.pos5s['template'],
+        template.pos6s['template']
+    ]
+
+    #?print( [ re.search(r'[0-9]',w).group() for w in [ pathlib.Path(v).name for v in templatePaths ] ] )
+    
+    testmode_2022_06_06 = True
+    #testmode_20220603 = False
     coords_positions = []
-    tmpvar = pag.locateCenterOnScreen(template.pos1s['template'], grayscale=False, confidence=0.95)
+    
+    def ConcurrentTaskGetCoordinateEquipPosition(template):
+        coords_positions.append([
+            int(re.search(  r'[0-9]',pathlib.Path(template).name).group()),
+                        pag.locateCenterOnScreen(template, grayscale=False, confidence=0.95
+                    )
+                ]
+            )
+    #- 装着箇所
+    """
+    tmpvar = pag.locateCenterOnScreen(template.pos1s['template'], grayscale=False, confidence=0.95) if not testmode_2022_06_06 == True else None
     coords_positions.append(tmpvar)
     print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos1s['template']}) )
-    
-    tmpvar = pag.locateCenterOnScreen(template.pos2s['template'], grayscale=False, confidence=0.95)
+    tmpvar = pag.locateCenterOnScreen(template.pos2s['template'], grayscale=False, confidence=0.95) if not testmode_2022_06_06 == True else None
     coords_positions.append(tmpvar)
     print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos2s['template']}) )
-    if testmode_20220603 == False:
-        tmpvar = pag.locateCenterOnScreen(template.pos3s['template'], grayscale=False, confidence=0.95)
-        coords_positions.append(tmpvar)
-        print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos3s['template']}) )
-        tmpvar = pag.locateCenterOnScreen(template.pos4s['template'], grayscale=False, confidence=0.95)
-        coords_positions.append(tmpvar)
-        print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos4s['template']}) )
-        tmpvar = pag.locateCenterOnScreen(template.pos5s['template'], grayscale=False, confidence=0.95)
-        coords_positions.append(tmpvar)
-        print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos5s['template']}) )
-        tmpvar = pag.locateCenterOnScreen(template.pos6s['template'], grayscale=False, confidence=0.95)
-        coords_positions.append(tmpvar)
-        print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos6s['template']}) )
-
+    #if testmode_20220603 == False:
+    tmpvar = pag.locateCenterOnScreen(template.pos3s['template'], grayscale=False, confidence=0.95) if not testmode_2022_06_06 == True else None
+    coords_positions.append(tmpvar)
+    print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos3s['template']}) )
+    tmpvar = pag.locateCenterOnScreen(template.pos4s['template'], grayscale=False, confidence=0.95) if not testmode_2022_06_06 == True else None
+    coords_positions.append(tmpvar)
+    print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos4s['template']}) )
+    tmpvar = pag.locateCenterOnScreen(template.pos5s['template'], grayscale=False, confidence=0.95)
+    coords_positions.append(tmpvar)
+    print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos5s['template']}) )
+    tmpvar = pag.locateCenterOnScreen(template.pos6s['template'], grayscale=False, confidence=0.95) if not testmode_2022_06_06 == True else None
+    coords_positions.append(tmpvar)
+    print(log_pandas('locateCenterOnScreen', **{'Result': tmpvar, 'Template': template.pos6s['template']}) )
+    """
+    for templatePath in templatePaths:
+        with ThreadPoolExecutor(max_workers=60) as executor:
+            executor.submit(ConcurrentTaskGetCoordinateEquipPosition, templatePath)
+    
+    print(coords_positions)
+    if testmode_2022_06_06 == True:
+        del coords_positions[0:4]
+        coords_positions.pop(-1)
+    
     #+ セットをクリックする
     pag.click(coords_set); time.sleep(1.5)
     #print(pd.DataFrame([ ["LocateCenterOnScreen", coords_set] ]).to_string(index=False, header=False)); 
@@ -371,29 +404,53 @@ if __name__ == '__main__':
     print(log_pandas('locateCenterOnScreen', **{'Status': 'Getting coordinates(initialize)'}) )
     #- 座標を取得する
     coords_setnames = []
-    
-    if testmode_20220603 == False:
-        coords_setnames = (
-        pag.locateCenterOnScreen(template.set_tairyoku['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_kikai['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_koukameityuu['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_kengo['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_koukateikou['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_kyouretu['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_damage['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_kaisoku['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_kyuuketu['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_meisou['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_hangeki['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_seizon['template'], grayscale=False, confidence=0.95),
-        pag.locateCenterOnScreen(template.set_ketui['template'], grayscale=False, confidence=0.95),
-        )
-    else:
-        coords_setnames = (
-            pag.locateCenterOnScreen(template.set_tairyoku['template'], grayscale=False, confidence=0.95),
-            pag.locateCenterOnScreen(template.set_kikai['template'], grayscale=False, confidence=0.95),
-            pag.locateCenterOnScreen(template.set_shuunen['template'], grayscale=False, confidence=0.95)
-        )
+    coords_setnames_itempaths = [
+        template.set_tairyoku['template'],
+        template.set_kikai['template'],
+        template.set_koukameityuu['template'],
+        template.set_kengo['template'],
+        template.set_koukateikou['template'],
+        template.set_kyouretu['template'],
+        template.set_damage['template'],
+        template.set_kaisoku['template'],
+        template.set_kyuuketu['template'],
+        template.set_meisou['template'],
+        template.set_hangeki['template'],
+        template.set_seizon['template'],
+        template.set_ketui['template'],
+        template.set_shuunen['template']
+    ]
+    #if testmode_20220603 == False:
+    def ConcurrentTaskGetCoordinateSetNames(template):
+        coords_setnames.append(pag.locateCenterOnScreen(template, grayscale=False, confidence=0.95))
+    """
+    coords_setnames = (
+    pag.locateCenterOnScreen(template.set_tairyoku['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_kikai['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_koukameityuu['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_kengo['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_koukateikou['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_kyouretu['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_damage['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_kaisoku['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_kyuuketu['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_meisou['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_hangeki['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_seizon['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_ketui['template'], grayscale=False, confidence=0.95),
+    pag.locateCenterOnScreen(template.set_shuunen['template'], grayscale=False, confidence=0.95)
+    )
+    """
+    for templatePath in coords_setnames_itempaths:
+        with ThreadPoolExecutor(max_workers=24) as executor:
+            executor.submit(ConcurrentTaskGetCoordinateSetNames, templatePath)
+    print(coords_setnames)
+#else:
+    #    coords_setnames = (
+    #        pag.locateCenterOnScreen(template.set_tairyoku['template'], grayscale=False, confidence=0.95),
+    #        pag.locateCenterOnScreen(template.set_kikai['template'], grayscale=False, confidence=0.95),
+    #        pag.locateCenterOnScreen(template.set_shuunen['template'], grayscale=False, confidence=0.95)
+    #    )
 
     setnames = [
         '体力',
@@ -412,8 +469,8 @@ if __name__ == '__main__':
         '執念' #if testmode_20220603 == True else None,
     ]
 
-    if testmode_20220603 == True:
-        del setnames[2:-2]
+    #? if testmode_20220603 == True:
+    #?     del setnames[2:-2]
     
     #print(pd.DataFrame(coords_setnames).to_string())
     #pprint.pprint(coords_setnames)
@@ -449,10 +506,19 @@ if __name__ == '__main__':
 
     # tsv出力ファイル名
     out_filename = WORKING_DIR.joinpath(f"ocr{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tsv").as_posix()
+    fixed_out_filename = WORKING_DIR.joinpath(f"fixed-ocr{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tsv").as_posix()
+    
+    if not pathlib.Path(fixed_out_filename).exists():
+        with open(fixed_out_filename, mode='x') as fp:
+            fp.write("")
+            fp.close()
+    
+
+
 
     #! ループ開始
     #!for n, coords_position in enumerate(coords_positions): 本番はこっち
-    for n, coords_position in enumerate(coords_positions): #+ テスト用
+    for n, coords_position in coords_positions: #+ テスト用
         time_start_position = time.time()
         
         # レコード用の配列を用意し、現在の装着箇所を格納する。
@@ -509,7 +575,8 @@ if __name__ == '__main__':
                 continue
                 
             #! 検出された座標の色を取得して、レアリティを判別する。(データ取得ループ開始)
-            for coord in coords_plus_reduce_overdetected:
+            #for coord in (coords_plus_reduce_overdetected):#! 本番はreversedなし
+            for coord in reversed(coords_plus_reduce_overdetected):
                 try:
                     AbilityValues = []
                 except:
@@ -528,40 +595,86 @@ if __name__ == '__main__':
                     print( log_pandas(title='Rarerity unknown', titlecolor=clr.DARKRED) )
 
                 #- プラスの座標をクリックする
-                pag.click(x=coord[0], y=coord[1]); time.sleep(2.5)
-                
+                pag.click(x=coord[0], y=coord[1]); time.sleep(0.5)
                 #- サマリの画像を取得する。
                 #* 画面全体を取得して、サマリの領域だけ切り取る。
                 #* 切り取った画像はtmpfileで名前を付けて保存。
-                with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='tmporigin.png' ) as tmp_origin_file:
-                    tmp_origin = sc.grab(mode='color', filepath=tmp_origin_file.name)
-                    tmp_origin = Image.open(tmp_origin_file.name)
-                    
-                    
-                    #サマリウィンドウをテンポラリファイルとして保存
-                    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='_summary.png', delete=False ) as tmp_summary:
-                        tmp_origin.crop(summrary_window_crop_area).save(tmp_summary.name)
+                def ConcurrentTaskCaptureAndBeforeSubstitute():
+                    with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='tmporigin.png' ) as tmp_origin_file:
+                        tmp_origin = sc.grab(mode='color', filepath=tmp_origin_file.name)
+                        tmp_origin = Image.open(tmp_origin_file.name)
                         
-                        #?test = cv2.imread(tmp_summary.name)
-                        #?cv2.imshow('',test)
-                        #?cv2.waitKey(0)
-                        #?cv2.destroyAllWindows()
+                        
+                        #サマリウィンドウをテンポラリファイルとして保存
+                        with tempfile.NamedTemporaryFile( dir=WORKING_PICTURE_SAVE_DIR.as_posix(), suffix='_summary.png', delete=False ) as tmp_summary:
+                            tmp_origin.crop(summrary_window_crop_area).save(tmp_summary.name)
+                            
+                            #?test = cv2.imread(tmp_summary.name)
+                            #?cv2.imshow('',test)
+                            #?cv2.waitKey(0)
+                            #?cv2.destroyAllWindows()
+                    
+                    
+                    AbilityValues = ocr_remake.main( [tmp_summary.name] )
+                    #print('after ocr_remake.main():', AbilityValues)
+                    
+                    #データベースを意識して不足しているオプションを補う。(表も見やすくする。)
+                    #AbilityValuesの[0]が数値(re.compile(r'[0-9]')の時配列に格納する。
+                    #配列に格納されている値のMaxと4を比較して足りない分を足していく。(型を間違わないように)
+
+                    AbilityValues_Rebuilded = RebuildDictionary.relation(AbilityValues[-1])
+                    
+                    print(clr.BLUE,AbilityValues[-1],clr.END)
+                    
+                    while max( [ int(i[0]) for i in AbilityValues_Rebuilded if re.search(r'[0-9]', i[0]) ] ) < 4:
+                        AbilityValues_Rebuilded.append([
+                            str( 1 + max( 
+                                            [ int(i[0]) for i in AbilityValues_Rebuilded if re.search(r'[0-9]', i[0]) ] 
+                                        )
+                            ),
+                            None,
+                            None
+                        ])
+                    
+                    print(clr.RED,AbilityValues_Rebuilded,clr.END)
+                    
+                    #AbilityValues_Rebuilded_Str = str(RebuildDictionary.relation(AbilityValues[-1]))
+                    #AbilityValues_Rebuilded_Str = str(RebuildDictionary.relation(AbilityValues_Rebuilded))
+                    #print(AbilityValues_Rebuilded_Str, type(AbilityValues_Rebuilded_Str))
+                    
+                    def rexcheck(string):
+                        string = OCR_rs_regex.Substitute_crit_d(string)
+                        string = OCR_rs_regex.Substitute_others(string)
+                        string = OCR_rs_regex.Substitute_att_def(string)
+                        return string
+
+                    SubstitutedLine = rexcheck(str(AbilityValues_Rebuilded))
+                    #tmplist = AbilityValues_Rebuilded_Str.replace("'",'"')
+                    #tmplist = list(AbilityValues_Rebuilded_Str)
+                    #tmplist.insert(0,"'")
+                    #tmplist.insert(-1,"'")
+                    #print(json.loads(tmplist))
+                    #print(json.loads("".join(tmplist)))
+                    with open(fixed_out_filename, mode='a') as fp:
+                        fp.write(SubstitutedLine)
+                    #print(ast.literal_eval(AbilityValues_Rebuilded_Str), type(ast.literal_eval(AbilityValues_Rebuilded_Str)))
+                    
+                    framebase.append(SubstitutedLine)
+                    #framebase.append(AbilityValues_Rebuilded_Str)
+                    
+                    recordresult = []
+                    recordresult.append(framebase)
+                    
+                    df_record = pd.DataFrame(recordresult)
+                    print( df_record.to_string(index=False, header=False) )            
+                    
+                    df_record.to_csv(out_filename, mode='a', header=False, sep="\t")
                 
-                AbilityValues = ocr_remake.main( [tmp_summary.name] )
-                #print('after ocr_remake.main():', AbilityValues)
+                ConcurrentTaskCaptureAndBeforeSubstitute()
                 
-                AbilityValues_Rebuilded = RebuildDictionary.relation(AbilityValues[-1])
-                #input(AbilityValues_Rebuilded)
+                #with ThreadPoolExecutor(max_workers=1000) as executor:
+                #    executor.submit(ConcurrentTaskCaptureAndBeforeSubstitute)
                 
-                framebase.append(AbilityValues_Rebuilded)
-                
-                recordresult = []
-                recordresult.append(framebase)
-                
-                df_record = pd.DataFrame(recordresult)
-                print( df_record.to_string(index=False, header=False) )            
-                
-                df_record.to_csv(out_filename, mode='a', header=False, sep="\t")
                 
                 #+  レコードをマスタテーブルへ追加
                 mastertable.append(framebase)
@@ -574,7 +687,7 @@ if __name__ == '__main__':
             #一時ファイル群を削除
             #pathlib.Path(tmp_sub.name).unlink(missing_ok=True)#scaned = cv2.imread(tmpf.name)
             #pathlib.Path(tmpf.name).unlink(missing_ok=True)
-            pathlib.Path(tmp_summary.name).unlink(missing_ok=True)
+            #pathlib.Path(tmp_summary.name).unlink(missing_ok=True)
             pathlib.Path(set_origin.name).unlink(missing_ok=True)
             
             #- 結果の印字
@@ -614,3 +727,7 @@ if __name__ == '__main__':
         ]
         print(pd.DataFrame(logmessage).to_string(index=False, header=False))
         n += 1
+
+pathlib.Path(out_filename).unlink(missing_ok=True)
+
+

@@ -393,7 +393,7 @@ if __name__ == '__main__':
             executor.submit(ConcurrentTaskGetCoordinateEquipPosition, templatePath)
     
     print(coords_positions)
-    if testmode_2022_06_06 == True:
+    if testmode_2022_06_06 == False:
         del coords_positions[0:4]
         coords_positions.pop(-1)
     
@@ -582,7 +582,7 @@ if __name__ == '__main__':
                 except:
                     AbilityValues = []
                 framebase = []
-                framebase.append(n + 1) # 装着箇所
+                framebase.append(n) # 装着箇所
                 framebase.append(setnames[j]) #セット名
                 
                 rarerity = GetRarerity(targetCoords=coord, templatePath=template.plus['template'], originPath=set_origin.name)
@@ -618,14 +618,18 @@ if __name__ == '__main__':
                     AbilityValues = ocr_remake.main( [tmp_summary.name] )
                     #print('after ocr_remake.main():', AbilityValues)
                     
+                    AbilityValues_Rebuilded = RebuildDictionary.relation(AbilityValues[-1])
+                    
+                    print(clr.BLUE,AbilityValues_Rebuilded,clr.END)
+
+                    #- [2]の値が [%, ''(空白)]の時 unknownとする
+                    for ability_class in AbilityValues_Rebuilded:
+                        
+                        pass
+                    
                     #データベースを意識して不足しているオプションを補う。(表も見やすくする。)
                     #AbilityValuesの[0]が数値(re.compile(r'[0-9]')の時配列に格納する。
                     #配列に格納されている値のMaxと4を比較して足りない分を足していく。(型を間違わないように)
-
-                    AbilityValues_Rebuilded = RebuildDictionary.relation(AbilityValues[-1])
-                    
-                    print(clr.BLUE,AbilityValues[-1],clr.END)
-                    
                     while max( [ int(i[0]) for i in AbilityValues_Rebuilded if re.search(r'[0-9]', i[0]) ] ) < 4:
                         AbilityValues_Rebuilded.append([
                             str( 1 + max( 
@@ -655,8 +659,8 @@ if __name__ == '__main__':
                     #tmplist.insert(-1,"'")
                     #print(json.loads(tmplist))
                     #print(json.loads("".join(tmplist)))
-                    with open(fixed_out_filename, mode='a') as fp:
-                        fp.write(SubstitutedLine)
+                    #with open(fixed_out_filename, mode='a') as fp:
+                    #    fp.write(SubstitutedLine + "\n")
                     #print(ast.literal_eval(AbilityValues_Rebuilded_Str), type(ast.literal_eval(AbilityValues_Rebuilded_Str)))
                     
                     framebase.append(SubstitutedLine)
@@ -728,6 +732,6 @@ if __name__ == '__main__':
         print(pd.DataFrame(logmessage).to_string(index=False, header=False))
         n += 1
 
-pathlib.Path(out_filename).unlink(missing_ok=True)
+#pathlib.Path(out_filename).unlink(missing_ok=True)
 
 

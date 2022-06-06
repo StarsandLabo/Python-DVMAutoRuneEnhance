@@ -1,5 +1,7 @@
+from audioop import reverse
 import re, sys, pathlib, datetime
 from types import NoneType
+from typing import Type
 
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
@@ -12,7 +14,11 @@ SUBSTITUTED_RESULT_FILE_PATH = PROJECT_DIR.joinpath(f'./{datetime.datetime.now()
 
 class Regexes():
     att_def_true = re.compile( r'[防|攻][御|撃]力' )
+    
     att_def_top = re.compile( r'[攻防][^際][^速度御,\']+') #- OK
+    att_def_top_type2 = re.compile( r'[攻防][^際撃御][^速度御,\']+') #- OK
+    att_def_top_judge = re.compile(r'(攻|防)?(御|撃)?[カ力]+')
+    
     att_def_center = re.compile( r'[^反][御撃][^速][^度,\']*' ) #- OK
     crit_d       = re.compile( r'クリティ[カ力]ル[^率,\']+')
     crit_d_indivisual = re.compile(r'(クリテ|ウリティ)(?=\')')
@@ -44,10 +50,10 @@ bg.AddWebColor('orange', '#ff4500')
 class TestWords():
     # 最初の2つが正
     words_att_def = ['攻撃力','防御力','防伽力', '防僅力', '防爺力', '防件力', '防全力', '防御カ', '防御カカ', '際御カカ', '攻内力', '攻沿力']
-
+    #
     #* くりて、ウリティは個別対応
     words_crit_d =['クリティカルダメージ','クリテ', 'クリティカルタダメージ', 'ウリティ', 'クリティカルタメーンジ', 'クリティカルダメーンジ', 'クリティカルダメーン', 'クリティカルタメージ', 'クリティカルダメーンジン', 'クリティカルタダメーンジ']
-
+    #
     words_other = ['回可','便中','回間']
 
 class Message():
@@ -85,48 +91,70 @@ class IndividualSubstites():
     crit_d = ['クリテ', 'ウリティ'] #クリティカルダメージのやつ
 
 
+
+
 # 正規の値ならそのまま値を返す。そうでない時は一文字目を見るパターン２文字目を見るパターンでそれぞれ置換する。
 def Substitute_att_def(word, silent=False):
     rx = Regexes()
     ret = word # for return value
     
-    #- findallによって全ての語を見る必要がある。
-    if not rx.att_def_true.search(word):
+    if rx.att_def_top_type2.findall(ret):
+        #print(fg.CYAN,ret,fg.END)
+        spanAndGroups = [ v for v in rx.att_def_top_type2.finditer(ret) ]
+        tmparray = list(ret)
         
-        if rx.att_def_top.search(word):
+        for value in reversed(spanAndGroups):
+            tmparray[value.span()[0]:value.span()[1]] = []
+            
+            if rx.att_def_top_type2.search(value.group()).group()[0] == '攻':
+                insertword = '攻撃力'
+            else:
+                insertword = '防御力'
+            tmparray.insert(value.span()[0], insertword)
+        print( Message.Message(result="".join(tmparray), input_origin=ret, emphasis=(rx.att_def_top_type2, re.compile(insertword)), parentFuncName=sys._getframe().f_code.co_name + f": {insertword}" ) ) if silent == False else True
+        ret = "".join(tmparray)
+    else:
+        print( Message.Message(result=f'{ret} ({fg.YELLOW}Exception ret or No Substituted{fg.END})', input_origin=ret, parentFuncName=sys._getframe().f_code.co_name ) )if silent == False else True
+        ret = word
+    
+    return ret
+
+    #- findallによって全ての語を見る必要がある。
+    """
+    if not rx.att_def_true.search(ret):
+        
+        #[v.group() for v in rx.att_def_true.findall(ret)]
+        #spans =[ v.span() for v in rx.att_def_top.finditer(ret) ]
+        #print(fg.BLUE,spans,fg.END)
+        #input()
+        if rx.att_def_top.search(ret):
             #print(rx.att_def_top.search(word))
             #judge = re.sub(rx.att_def_top, r'\1\2力', word)
             #input(f'{rx.att_def_top.search(word).group()}[0]: {rx.att_def_top.search(word).group()[0]} [1]: {rx.att_def_top.search(word).group()[1]}')
-            print(rx.att_def_top.search(word).group(),rx.att_def_top.search(word).group()[0])
-            if  (rx.att_def_top.search(word).group()[0]  == '攻') and \
-                (rx.att_def_top.search(word).group()     != '攻撃速度') :
-                print( Message.Message(result=rx.att_def_top.sub('攻撃力', word), input_origin=word, emphasis=(rx.att_def_top, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name  ) ) if silent == False else True
+            print(rx.att_def_top.search(ret).group(),rx.att_def_top.search(ret).group()[0])
+            if  (rx.att_def_top.search(ret).group()[0]  == '攻') and \
+                (rx.att_def_top.search(ret).group()     != '攻撃速度') :
+                print( Message.Message(result=rx.att_def_top.sub('攻撃力', ret), input_origin=ret, emphasis=(rx.att_def_top, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name  ) ) if silent == False else True
                 ret = rx.att_def_top.sub('攻撃力', word)
-                word = rx.att_def_top.sub('攻撃力', word)
             else:
-                print( Message.Message(result=rx.att_def_top.sub('防御力', word), input_origin=word, emphasis=(rx.att_def_top, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
-                ret = rx.att_def_top.sub('防御力', word)
-                word = rx.att_def_top.sub('防御力', word)
+                print( Message.Message(result=rx.att_def_top.sub('防御力', ret), input_origin=ret, emphasis=(rx.att_def_top, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
+                ret = rx.att_def_top.sub('防御力', ret)
         
-        if rx.att_def_center.search(word):
-            #input(f'{rx.att_def_center.search(word).group()}[0]: {rx.att_def_center.search(word).group()[0]} [1]: {rx.att_def_center.search(word).group()[1]}')
+        if rx.att_def_center.search(ret):
+            #input(f'{rx.att_def_center.search(ret).group()}[0]: {rx.att_def_center.search(ret).group()[0]} [1]: {rx.att_def_center.search(ret).group()[1]}')
             
-            if  (rx.att_def_center.search(word).group()[1]  == '撃' or '御') and \
-                (rx.att_def_center.search(word).group()     != '攻撃速度') :
-                #input(f'{rx.att_def_center.search(word).group()}[0]: {rx.att_def_center.search(word).group()[0]} [1]: {rx.att_def_center.search(word).group()[1]}')
+            if  (rx.att_def_center.search(ret).group()[1]  == '撃' or '御') and \
+                (rx.att_def_center.search(ret).group()     != '攻撃速度') :
+                #input(f'{rx.att_def_center.search(ret).group()}[0]: {rx.att_def_center.search(ret).group()[0]} [1]: {rx.att_def_center.search(ret).group()[1]}')
             
-                print( Message.Message(result=rx.att_def_center.sub('攻撃力', word), input_origin=word, emphasis=(rx.att_def_center, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
-                ret = rx.att_def_center.sub('攻撃力', word)
-                word = rx.att_def_center.sub('攻撃力', word)
+                print( Message.Message(result=rx.att_def_center.sub('攻撃力', ret), input_origin=ret, emphasis=(rx.att_def_center, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
+                ret = rx.att_def_center.sub('攻撃力', ret)
+                word = rx.att_def_center.sub('攻撃力', ret)
             else:
-                print( Message.Message(result=rx.att_def_center.sub('防御力', word), input_origin=word, emphasis=(rx.att_def_center, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
-                ret = rx.att_def_center.sub('防御力', word)
-                word = rx.att_def_center.sub('防御力', word)
-    else:
-        print( Message.Message(result=f'{word} ({fg.YELLOW}Exception Word or No Substituted{fg.END})', input_origin=word, parentFuncName=sys._getframe().f_code.co_name ) )if silent == False else True
-        ret = word
-        
-    return ret
+                print( Message.Message(result=rx.att_def_center.sub('防御力', ret), input_origin=ret, emphasis=(rx.att_def_center, rx.att_def_true), parentFuncName=sys._getframe().f_code.co_name ) ) if silent == False else True
+                ret = rx.att_def_center.sub('防御力', ret)
+                word = rx.att_def_center.sub('防御力', ret)
+    """
 
 # クリテやウリティとクリティカルダメージが一緒にいると対応できないので修正する。
 def Substitute_crit_d(word, silent=False):
@@ -152,15 +180,16 @@ def Substitute_crit_d(word, silent=False):
     #- ifが必要
     if rx.crit_d_indivisual.findall(ret):
         for tgtword in IndividualSubstites.crit_d:
-            #print( [ v.span() for v in rx.crit_d_indivisual_type2.finditer(ret) if v.group() == tgtword ] )
+            #?print( [ v.span() for v in rx.crit_d_indivisual_type2.finditer(ret) if v.group() == tgtword ] )
             try:
                 spans = [ v.span() for v in rx.crit_d_indivisual_type2.finditer(ret) if v.group() == tgtword ]
                 tmpline = list(ret)
-                tmpline[spans[0][0]:spans[0][1] + 1] = []
+                tmpline[spans[0][0]:spans[0][1]] = []
                 tmpline.insert(spans[0][0], 'クリティカルダメージ')
-                print( Message.Message(result="".join(tmpline), input_origin=ret, emphasis=(rx.crit_d_indivisual, tgtword), parentFuncName=sys._getframe().f_code.co_name + ": 個別対応" ) ) if silent == False else True
+                print( Message.Message(result="".join(tmpline), input_origin=ret, emphasis=(rx.crit_d_indivisual_type2, tgtword), parentFuncName=sys._getframe().f_code.co_name + f": 個別対応 {tgtword}" ) ) if silent == False else True
                 ret = "".join(tmpline)
                 
+                print(ret)
                 input()
             except IndexError:
                 pass
@@ -181,14 +210,6 @@ def Substitute_crit_d(word, silent=False):
     """
     
     return ret
-
-# test
-# tgtwordに一致するspanをとってきて、その箇所を置換する。
-    
-
-
-#入力文字列はrx.otherObjectの条件に合致するかどうか調べる。
-#合致する場合は置換する。
 
 def Substitute_others(inputword, silent=False, recursiveFlag=True):
     rx = Regexes()
@@ -237,20 +258,22 @@ if __name__ == '__main__':
     #input()
     def rexcheck(target):
         
-        string = Substitute_crit_d(target)
-        if string == None:
-            print(fg.YELLOW, string, fg.END)
-            input()
+        if True == False:
+            string = Substitute_crit_d(target)
+            if string == None:
+                print(fg.YELLOW, string, fg.END)
+                input()
+            
+            string2 = Substitute_others(string)
+            if string2 == None:
+                print(fg.YELLOW, string2, fg.END)
+                input()
         
-        string2 = Substitute_others(string)
-        if string == None:
-            print(fg.YELLOW, string, fg.END)
-            input()
-        
-        string3 = Substitute_att_def(string2)
+        string3 = Substitute_att_def(target)
+        #string3 = Substitute_att_def(string2)
         print(bg.DARKMAGENTA,string3,bg.END)
-        if string == None:
-            print(fg.RED, string, fg.END)
+        if string3 == None:
+            print(fg.RED, string3, fg.END)
         
         return string3
     
@@ -266,8 +289,9 @@ if __name__ == '__main__':
     print(bg.ORANGE,'Result',bg.END, 'cat', SUBSTITUTED_RESULT_FILE_PATH )
     
     #? test
-    targetword = "'クリテ'"
+    targetword = "'防爺力'"
     import subprocess
+    print(bg.DARKGREEN,f'Auto Grepping Result (Word: {targetword})',bg.END,sep="")
     subprocess.Popen([f'grep -i "{targetword}" {SUBSTITUTED_RESULT_FILE_PATH}'],shell=True)
     #for word in TestWords.words_att_def:
     #    Substitute_att_def(word, silent=False)

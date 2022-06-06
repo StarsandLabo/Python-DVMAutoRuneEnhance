@@ -16,10 +16,10 @@ class Regexes():
     att_def_true = re.compile( r'[防|攻][御|撃]力' )
     
     att_def_top = re.compile( r'[攻防][^際][^速度御,\']+') #- OK
-    att_def_top_type2 = re.compile( r'[攻防][^際撃御][^速度御,\']+') #- OK
-    att_def_top_judge = re.compile(r'(攻|防)?(御|撃)?[カ力]+')
+    att_def_top_type2 = re.compile( r'[攻防][^際][^速度御,\']+') #- OK
+    att_def_top_judge = re.compile(r'(攻|防)(御|撃)?[カ力]+')
     
-    att_def_center = re.compile( r'[^反][御撃][^速][^度,\']*' ) #- OK
+    att_def_center = re.compile( r'[^反][御撃][^速度,\']+' ) #- OK
     crit_d       = re.compile( r'クリティ[カ力]ル[^率,\']+')
     crit_d_indivisual = re.compile(r'(クリテ|ウリティ)(?=\')')
     crit_d_indivisual_type2 = re.compile(r'(クリテ|ウリティ)[^\']*')
@@ -98,24 +98,25 @@ def Substitute_att_def(word, silent=False):
     rx = Regexes()
     ret = word # for return value
     
-    if rx.att_def_top_type2.findall(ret):
-        #print(fg.CYAN,ret,fg.END)
-        spanAndGroups = [ v for v in rx.att_def_top_type2.finditer(ret) ]
-        tmparray = list(ret)
-        
-        for value in reversed(spanAndGroups):
-            tmparray[value.span()[0]:value.span()[1]] = []
+    for RegexCondition in [Regexes.att_def_top_type2, Regexes.att_def_center]:
+        if RegexCondition.findall(ret):
+            #print(fg.CYAN,ret,fg.END)
+            spanAndGroups = [ v for v in RegexCondition.finditer(ret) ]
+            tmparray = list(ret)
             
-            if rx.att_def_top_type2.search(value.group()).group()[0] == '攻':
-                insertword = '攻撃力'
-            else:
-                insertword = '防御力'
-            tmparray.insert(value.span()[0], insertword)
-        print( Message.Message(result="".join(tmparray), input_origin=ret, emphasis=(rx.att_def_top_type2, re.compile(insertword)), parentFuncName=sys._getframe().f_code.co_name + f": {insertword}" ) ) if silent == False else True
-        ret = "".join(tmparray)
-    else:
-        print( Message.Message(result=f'{ret} ({fg.YELLOW}Exception ret or No Substituted{fg.END})', input_origin=ret, parentFuncName=sys._getframe().f_code.co_name ) )if silent == False else True
-        ret = word
+            for value in reversed(spanAndGroups):
+                tmparray[value.span()[0]:value.span()[1]] = []
+                
+                if RegexCondition.search(value.group()).group()[0] == '攻':
+                    insertword = '攻撃力'
+                else:
+                    insertword = '防御力'
+                tmparray.insert(value.span()[0], insertword)
+            print( Message.Message(result="".join(tmparray), input_origin=ret, emphasis=(RegexCondition, re.compile(insertword)), parentFuncName=sys._getframe().f_code.co_name + f": {insertword}" ) ) if silent == False else True
+            ret = "".join(tmparray)
+        else:
+            print( Message.Message(result=f'{ret} ({fg.YELLOW}Exception ret or No Substituted{fg.END})', input_origin=ret, parentFuncName=sys._getframe().f_code.co_name ) )if silent == False else True
+            ret = word
     
     return ret
 
@@ -190,7 +191,7 @@ def Substitute_crit_d(word, silent=False):
                 ret = "".join(tmpline)
                 
                 print(ret)
-                input()
+                #input()
             except IndexError:
                 pass
     
@@ -258,18 +259,18 @@ if __name__ == '__main__':
     #input()
     def rexcheck(target):
         
-        if True == False:
-            string = Substitute_crit_d(target)
-            if string == None:
-                print(fg.YELLOW, string, fg.END)
-                input()
-            
-            string2 = Substitute_others(string)
-            if string2 == None:
-                print(fg.YELLOW, string2, fg.END)
-                input()
+    #if True == False
+        string = Substitute_crit_d(target)
+        if string == None:
+            print(fg.YELLOW, string, fg.END)
+            input()
         
-        string3 = Substitute_att_def(target)
+        string2 = Substitute_others(string)
+        if string2 == None:
+            print(fg.YELLOW, string2, fg.END)
+            input()
+        
+        string3 = Substitute_att_def(string2)
         #string3 = Substitute_att_def(string2)
         print(bg.DARKMAGENTA,string3,bg.END)
         if string3 == None:
@@ -289,7 +290,7 @@ if __name__ == '__main__':
     print(bg.ORANGE,'Result',bg.END, 'cat', SUBSTITUTED_RESULT_FILE_PATH )
     
     #? test
-    targetword = "'防爺力'"
+    targetword = "'攻撃カ'"
     import subprocess
     print(bg.DARKGREEN,f'Auto Grepping Result (Word: {targetword})',bg.END,sep="")
     subprocess.Popen([f'grep -i "{targetword}" {SUBSTITUTED_RESULT_FILE_PATH}'],shell=True)

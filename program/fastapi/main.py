@@ -6,13 +6,14 @@ import tempfile
 from types import NoneType
 from xml.dom.xmlbuilder import DocumentLS
 
-from numpy import cov
+from numpy import cov, single
 
 PROJECT_DIR = pathlib.Path('/home/starsand/DVM-AutoRuneEnhance/')
 sys.path.append(PROJECT_DIR.as_posix())
 sys.path.append(PROJECT_DIR.joinpath('tools').as_posix())
 sys.path.append(PROJECT_DIR.joinpath('lib', 'python3.10', 'site-packages').as_posix())
 sys.path.append(PROJECT_DIR.joinpath('program').as_posix())
+sys.path.append(PROJECT_DIR.joinpath('program','database').as_posix())
 
 WORKING_DIR = PROJECT_DIR.joinpath('work')       
 WORKING_PICTURE_SAVE_DIR = WORKING_DIR.joinpath('img')
@@ -43,6 +44,9 @@ JSON_SAVE_DIR  = PROJECT_DIR.joinpath('program','fastapi','dev')
 JSON_FILE_NAME = 'results.json'
 JSON_FILE_PATH = JSON_SAVE_DIR.joinpath(JSON_FILE_NAME)
 
+
+
+
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.responses import RedirectResponse
@@ -62,7 +66,29 @@ from fastapi.staticfiles import StaticFiles
 from fastapi import Form
 from typing import Optional
 from pydantic import BaseModel, Field
+import mariadb
+import mariadb_practice as db
+
 #os.chdir(PROJECT_DIR.joinpath('program', 'fastapi').as_posix())
+with open( db.MARIADB_PASSWORD_PATH, mode='r', encoding='utf-8') as fp:
+    secret = fp.read().splitlines()[0]
+    
+try:
+    conn = mariadb.connect(
+        user = 'starsand',
+        password = secret,
+        host = 'localhost',
+        port = 3306
+    )
+    
+except mariadb.Error as e:
+    print(f"Error connecting to MariaDB Platform: {e}")
+    sys.exit(1)
+    
+
+cur = conn.cursor()
+
+
 
 lnToken = linetools.getToken() # Line Notify 用のトークン取得
 fg = tc.fg #フォアグラウンド 色つけ用
@@ -313,6 +339,49 @@ def LockMarkOperation(mode, filepath):
         pass
     #return print(f'[ {sys._getframe().f_code.co_name} ] end {datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
 
+def GetActiveTable(c=cur):
+    c.execute('SELECT * FROM runelist;')
+    return c.fetchall()
+
+def GetColumnNames(c=cur,syncGetActiveTable=True):
+    c.execute('desc runelist;')
+    if syncGetActiveTable:
+        columns = [ v[0] for v in cur.fetchall() ]
+        columns.remove('annotation')
+        columns.remove('digest')
+        return columns
+    else:
+        return [ v[0] for v in cur.fetchall() ]
+
+def GetRecordsForHTML(c=cur):
+    c.execute('USE dvm_auto_rune_enhance')
+    data = GetActiveTable()
+    columns = GetColumnNames(syncGetActiveTable=True)
+        
+    DictRecord = []
+    for record in data:
+        DictRecord.append(dict(zip(columns, record)))
+        
+
+    ConvertedDict = []
+    for record in DictRecord:
+        ConvertedDictRecord = {}
+        
+        for single_key in list(record.keys()):
+            if  type(record[single_key]) == float:
+                if int(record[single_key]) < 2:
+                    ConvertedDictRecord[single_key] = str(int( ( record[single_key] - 1 ) * 100 )) + "%"
+                else:
+                    ConvertedDictRecord[single_key] = int(record[single_key])
+            else:
+                ConvertedDictRecord[single_key] = record[single_key]
+        ConvertedDict.append(ConvertedDictRecord)
+            
+            
+    return ConvertedDict
+
+fg = tc.fg
+bg = tc.bg
 
 @app.get("/{process_gen}/{call_methods}")
 async def ReadGen(
@@ -434,6 +503,29 @@ async def posttest(payload: PostReceivedFromUser):
         print('[ /post < Validation Process_gen and Saved image file path > ] ', "Converted['Process_gen']:", Converted['Process_gen'], "SavedCurrentProcessGeneration:", SavedCurrentProcessGeneration)
     
     return ['post ok', payload]
+
+
+@app.get('/possesion')
+def possesion(request: Request):
+    records = GetRecordsForHTML()
+    pprint.pprint(records[0])
+    """
+    def possesion(request: Request):
+        records = GetRecordsForHTML()
+        pprint.pprint(records[0])
+        
+        return templates.TemplateResponse('prod/possesion.html', {
+            "request"  : request,
+            "records"  : records
+            }
+        )
+    """
+    return templates.TemplateResponse('prod/possesion.html', {
+        "request": request,
+        "records"  : records
+        }
+    )
+
 
 @app.post("/{process_gen}")
 async def ReadPostedItem(request: Request, params: Optional[str] = Form(None)):
@@ -676,26 +768,6 @@ async def ClearArray(request: Request):
         "request": request
         }
     )
-
-@app.get("/list")
-async def ViewReceivedContent():
-    try:
-        view_content = "<br>".join( [ f'<li><a href="image/result/\
-        {pathlib.Path(v["file"]).name}\
-            ">{v["file"]}</a> Operation: {v["call_method"]}</li>' for v in results] )
-    except:
-        view_content = ""
-
-    return HTMLResponse(f"""
-        Locking Operation: <a href="http://192.168.11.8:8000/exec">Run Locking Operation</a><br>
-        List Clear: <a href="http://192.168.11.8:8000/clear">List Clear API</a><br>
-        <hr>
-        Target Items {len(results)}<br>
-        {view_content}
-        <br><hr>Server Terminate: <a href="http://192.168.11.8:8000/exit">Server Terminate</a><br>
-        """
-    )
-
 
 @app.get("/exit")
 def exit_uvicorn():

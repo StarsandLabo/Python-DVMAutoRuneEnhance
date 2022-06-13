@@ -42,6 +42,18 @@
 
 ### 個々のページ解説について
 
+<details><summary>Line Notifyにはこういう通知が届く</sumamry>
+
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/LineNotify_2022-06-13.png)
+
++ unlock url: から続く内容を選択すると下の図のルーンがロック解除待機のリストに格納される。
++ EstimatedなのはOCRの仕様上完全な精度が出ないため~~画像そのまま送ればいいのでは…~~  
++ スタンプは見た目の区切りをつける目的で入れている。また、サービス側で利用できるものが決まっている。
+  - 通常はもっといっぱい強化結果が並ぶので開始終了がどこか分かりづらい。
+    - こういう理由もあって、技術的挑戦とあわせて利便性向上するのではと思ったのでポータル作成した。
+
+</details>
+
 <details><summary>最新処理済みルーン一覧</summary>
 
 ![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-03-53.png)

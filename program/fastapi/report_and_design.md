@@ -48,8 +48,6 @@
 
 ### やりたかったこと
 
-![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-12-22.png)
-
 + 強化後の画像表示
   - スマートフォンからだと画像が小さいため文字情報も付与したかった
 + ボタンクリックでロック解除待ちリストに追加
@@ -61,7 +59,7 @@
 
 ### やりたかったこと
 
-![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-18-47.png)
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-12-22.png)
 
 + ロック解除対象の表示
 + ロック解除待ちリストからの削除
@@ -74,7 +72,7 @@
 
 ### やりたかったこと
 
-![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-23-25.png)
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-18-47.png)
 
 + 持ってるルーン一覧の表示[^5]
   - 別のOCRプログラムで取得した情報を元にする。
@@ -87,7 +85,7 @@
 
 ### やりたかったこと
 
-![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-48.png)
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-23-25.png)
 
 + 対象一覧に格納されている内容を一括削除
   - 英語変な気がするけど気にしない。
@@ -98,7 +96,7 @@
 
 ### やりたかったこと
 
-![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-52.png)
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-48.png)
 
 + 対象一覧に格納されている内容を元にゲームのロックを解除
   - 今は強化直後の場面でしか解除できないが、理想としてはゲーム内の状態を選ばずにできると良い。  
@@ -109,6 +107,8 @@
 <details><summary>サーバ停止</summary>
 
 ### やりたかったこと
+
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-52.png)
 
 + アプリケーションの停止
   - 理屈ではプロセスを停止するだけなので、それをWeb画面からやってみたいと思った。

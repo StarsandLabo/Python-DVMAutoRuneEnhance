@@ -42,7 +42,7 @@
 
 ### 個々のページ解説について
 
-<details><summary>Line Notifyにはこういう通知が届く</sumamry>
+<details><summary>Line Notifyにはこういう通知が届く</summary>
 
 ![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/LineNotify_2022-06-13.png)
 

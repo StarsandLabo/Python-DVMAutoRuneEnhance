@@ -48,6 +48,8 @@
 
 ### やりたかったこと
 
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-12-22.png)
+
 + 強化後の画像表示
   - スマートフォンからだと画像が小さいため文字情報も付与したかった
 + ボタンクリックでロック解除待ちリストに追加
@@ -58,6 +60,8 @@
 <details><summary>対象一覧</summary>
 
 ### やりたかったこと
+
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-18-47.png)
 
 + ロック解除対象の表示
 + ロック解除待ちリストからの削除
@@ -70,6 +74,8 @@
 
 ### やりたかったこと
 
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-23-25.png)
+
 + 持ってるルーン一覧の表示[^5]
   - 別のOCRプログラムで取得した情報を元にする。
 + 検索機能
@@ -81,13 +87,18 @@
 
 ### やりたかったこと
 
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-48.png)
+
 + 対象一覧に格納されている内容を一括削除
+  - 英語変な気がするけど気にしない。
 
 </details>
 
 <details><summary>作業開始</summary>
 
 ### やりたかったこと
+
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/images/Screenshot%20from%202022-06-13%2017-28-52.png)
 
 + 対象一覧に格納されている内容を元にゲームのロックを解除
   - 今は強化直後の場面でしか解除できないが、理想としてはゲーム内の状態を選ばずにできると良い。  

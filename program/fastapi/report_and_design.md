@@ -38,13 +38,13 @@
 
 ### サイトマップ
 
-[画像]
+![sitemap](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/sitemap.png)
 
-### 個々のページ解説(画像も交え技術的要素も含める)
+### 個々のページ解説について
 
 <details><summary>最新処理済みルーン一覧</summary>
 
-[画像]
+![image](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/Screenshot%20from%202022-06-13%2017-03-53.png)
 
 ### やりたかったこと
 

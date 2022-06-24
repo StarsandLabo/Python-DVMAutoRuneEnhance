@@ -2,6 +2,7 @@
 
 ## 目次
   - [目次](#目次)
+  - [プロジェクトで派生した成果物](#プロジェクトで派生した成果物)
   - [概要](#概要)
   - [デモ動画](#デモ動画)
   - [目的](#目的)
@@ -12,6 +13,12 @@
   - [得られたこと/もの](#得られたこともの)
   - [課題・改善したいこと](#課題改善したいこと)
 
+
+## プロジェクトで派生した成果物
+
+[OCRによる装備品一覧作成](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/tools/ocr_remake.py)  
+
+[強化した装備品を管理するポータル](https://github.com/StarsandLabo/Python-DVMAutoRuneEnhance/blob/main/program/fastapi/report_and_design.md)  
 
 ## 概要
   
